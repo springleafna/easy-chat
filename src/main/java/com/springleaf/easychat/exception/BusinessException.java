@@ -1,0 +1,40 @@
+package com.springleaf.easychat.exception;
+
+import com.springleaf.easychat.enums.ResultCodeEnum;
+import lombok.Getter;
+
+@Getter
+public class BusinessException extends RuntimeException {
+
+    /**
+     * 错误码
+     */
+    private Integer code;
+
+    /**
+     * 错误信息
+     */
+    private String message;
+
+    public BusinessException(String message) {
+        // 默认使用 HTTP 400 Bad Request
+        this(400, message);
+    }
+
+    public BusinessException(Integer code, String message) {
+        super(message);
+        this.code = code;
+        this.message = message;
+    }
+
+    public BusinessException(ResultCodeEnum resultCodeEnum, String message) {
+        super(message);
+        this.code = resultCodeEnum.getCode();
+        this.message = message;
+    }
+
+    public BusinessException(ResultCodeEnum resultCodeEnum) {
+        this.code = resultCodeEnum.getCode();
+        this.message = resultCodeEnum.getMessage();
+    }
+}

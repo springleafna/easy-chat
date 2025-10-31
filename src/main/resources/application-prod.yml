@@ -1,0 +1,34 @@
+server:
+  port: 8092
+spring:
+  jackson:
+    time-zone: GMT+8
+  datasource:
+    url: jdbc:mysql://120.26.236.122:33306/easy_chat?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: root
+    password: YOUR_ROOT_PASSWORD
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 120.26.236.122
+      port: 56379
+      username: default
+      password: Yjw123456#
+logging:
+  level:
+    com.springleaf.easychat.mapper: DEBUG
+    org.apache.ibatis: DEBUG
+# Sa-Token配置
+sa-token:
+  # token名称 (同时也是cookie名称)
+  token-name: Authorization
+  # token 有效期（单位：秒） 默认30天，-1 代表永久有效 这里是一天
+  timeout: -1
+  # 是否允许同一账号并发登录 (为true时允许一起登录, 为false时新登录挤掉旧登录)
+  is-concurrent: false
+  # token风格
+  token-style: uuid
+  # 是否输出操作日志
+  is-log: true
+  # 关闭从 Cookie 读取
+  is-read-cookie: false

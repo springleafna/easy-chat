@@ -1,0 +1,103 @@
+CREATE DATABASE easy_chat IF NOT EXISTS;
+
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
+    account VARCHAR(50) UNIQUE NOT NULL COMMENT '账号唯一',
+    nickname VARCHAR(100) NOT NULL COMMENT '昵称',
+    password VARCHAR(255) NOT NULL COMMENT '密码',
+    phone VARCHAR(20) UNIQUE COMMENT '手机号',
+    email VARCHAR(100) UNIQUE COMMENT '邮箱',
+    avatar_url VARCHAR(500) COMMENT '头像URL',
+    gender TINYINT DEFAULT 0 COMMENT '性别：0-未知，1-男，2-女',
+    birthday DATE COMMENT '生日',
+    signature VARCHAR(200) DEFAULT '' COMMENT '个性签名',
+    status TINYINT DEFAULT 1 COMMENT '用户状态：0-禁用，1-正常，2-注销',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP NULL COMMENT '最后登录时间',
+
+    INDEX idx_account (account),
+    INDEX idx_phone (phone),
+    INDEX idx_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+CREATE TABLE friends (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    friend_id BIGINT NOT NULL COMMENT '好友ID',
+    remark_name VARCHAR(100) COMMENT '好友备注名',
+    status TINYINT DEFAULT 1 COMMENT '关系状态：0-已删除，1-正常，2-黑名单',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_user_friend (user_id, friend_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_friend_id (friend_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='好友表';
+
+CREATE TABLE groups (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '群组ID',
+    group_name VARCHAR(100) NOT NULL COMMENT '群名称',
+    owner_id BIGINT NOT NULL COMMENT '群主ID',
+    avatar_url VARCHAR(500) COMMENT '群头像URL',
+    announcement TEXT COMMENT '群公告',
+    max_members INT DEFAULT 500 COMMENT '最大成员数',
+    status TINYINT DEFAULT 1 COMMENT '群状态：0-已解散，1-正常',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_owner_id (owner_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='群组表';
+
+CREATE TABLE group_members (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    group_id BIGINT NOT NULL COMMENT '群组ID',
+    user_id BIGINT NOT NULL COMMENT '成员ID',
+    nickname VARCHAR(100) COMMENT '群内昵称',
+    role TINYINT DEFAULT 1 COMMENT '成员角色：1-普通成员，2-管理员，3-群主',
+    status TINYINT DEFAULT 1 COMMENT '成员状态：0-已退出，1-正常',
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+
+    UNIQUE KEY uk_group_user (group_id, user_id),
+    INDEX idx_group_id (group_id),
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='群组成员表';
+
+CREATE TABLE conversations (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '会话ID',
+    type TINYINT NOT NULL COMMENT '会话类型：1-单聊，2-群聊',
+    target_id BIGINT NOT NULL COMMENT '目标ID（单聊为对方user_id，群聊为group_id）',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    unread_count INT DEFAULT 0 COMMENT '未读消息数',
+    last_message_id BIGINT DEFAULT 0 COMMENT '最后一条消息ID',
+    last_message_time TIMESTAMP NULL COMMENT '最后消息时间',
+    status TINYINT DEFAULT 1 COMMENT '会话状态：0-已删除，1-正常',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_user_target_type (user_id, target_id, type),
+    INDEX idx_user_id (user_id),
+    INDEX idx_target_id (target_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表';
+
+CREATE TABLE messages (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息ID',
+    conversation_id BIGINT NOT NULL COMMENT '会话ID',
+    sender_id BIGINT NOT NULL COMMENT '发送者ID',
+    receiver_id BIGINT COMMENT '接收者ID（单聊时使用）',
+    group_id BIGINT COMMENT '群组ID（群聊时使用）',
+    message_type TINYINT NOT NULL COMMENT '消息类型：1-文本，2-图片，3-语音，4-视频，5-文件，6-位置，7-系统消息',
+    content TEXT COMMENT '消息内容',
+    media_url VARCHAR(500) COMMENT '媒体文件URL（图片/语音/视频等）',
+    file_name VARCHAR(200) COMMENT '文件名',
+    file_size INT COMMENT '文件大小（字节）',
+    status TINYINT DEFAULT 1 COMMENT '消息状态：0-已撤回，1-正常，2-已删除',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_conversation_id (conversation_id),
+    INDEX idx_sender_id (sender_id),
+    INDEX idx_receiver_id (receiver_id),
+    INDEX idx_group_id (group_id),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='消息表';
