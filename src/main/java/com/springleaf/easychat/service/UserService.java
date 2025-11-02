@@ -17,9 +17,8 @@ public interface UserService extends IService<User> {
      * 用户注册
      *
      * @param request 注册请求
-     * @return 用户ID
      */
-    Long register(UserRegisterRequest request);
+    void register(UserRegisterRequest request);
 
     /**
      * 用户登录

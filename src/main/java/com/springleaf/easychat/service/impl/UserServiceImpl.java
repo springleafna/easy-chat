@@ -34,13 +34,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long register(UserRegisterRequest request) {
-        // 1. 校验两次密码是否一致
-        if (!request.getPassword().equals(request.getConfirmPassword())) {
-            throw new BusinessException(ResultCodeEnum.PARAM_ERROR, "两次密码不一致");
-        }
-
-        // 2. 检查手机号是否已被注册
+    public void register(UserRegisterRequest request) {
+        // 1. 检查手机号是否已被注册
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(User::getPhone, request.getPhone());
         User existUser = this.getOne(queryWrapper);
@@ -48,30 +43,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ResultCodeEnum.USER_ALREADY_EXIST, "该手机号已被注册");
         }
 
-        // 3. 生成唯一账号
+        // 2. 生成唯一账号
         String account = AccountUtil.generateAccount();
 
-        // 4. 加密密码
+        // 3. 加密密码
         String encryptedPassword = PasswordUtil.encryptPassword(request.getPassword());
 
-        // 5. 创建用户对象
+        // 4. 创建用户对象
         User user = new User();
         user.setAccount(account);
         user.setPhone(request.getPhone());
         user.setPassword(encryptedPassword);
-        user.setNickname("用户" + account.substring(account.length() - 6)); // 默认昵称：用户+账号后6位
+        user.setNickname(request.getNickName());
         user.setStatus(UserStatusEnum.NORMAL.getCode());
         user.setGender(GenderEnum.UNKNOWN.getCode()); // 默认性别：未知
         user.setSignature(""); // 默认签名为空
 
-        // 6. 保存到数据库
+        // 5. 保存到数据库
         boolean saveResult = this.save(user);
         if (!saveResult) {
             throw new BusinessException(ResultCodeEnum.OPERATION_FAILED, "注册失败");
         }
 
         log.info("用户注册成功，账号：{}, 手机号：{}", account, request.getPhone());
-        return user.getId();
     }
 
     @Override

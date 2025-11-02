@@ -3,7 +3,6 @@ package com.springleaf.easychat.model.vo;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
-import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -11,9 +10,7 @@ import java.time.LocalDateTime;
  * 用户信息响应
  */
 @Data
-public class UserVO implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class UserVO {
 
     /**
      * 用户ID

@@ -30,9 +30,9 @@ public class UserController {
      * @return 用户ID
      */
     @PostMapping("/register")
-    public Result<Long> register(@Valid @RequestBody UserRegisterRequest request) {
-        Long userId = userService.register(request);
-        return Result.success(userId);
+    public Result<Void> register(@Valid @RequestBody UserRegisterRequest request) {
+        userService.register(request);
+        return Result.success();
     }
 
     /**

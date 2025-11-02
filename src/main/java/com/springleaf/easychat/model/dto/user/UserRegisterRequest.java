@@ -4,15 +4,17 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
-import java.io.Serializable;
-
 /**
  * 用户注册请求
  */
 @Data
-public class UserRegisterRequest implements Serializable {
+public class UserRegisterRequest {
 
-    private static final long serialVersionUID = 1L;
+    /**
+     * 昵称
+     */
+    @NotBlank(message = "昵称不能为空")
+    private String nickName;
 
     /**
      * 手机号
@@ -27,10 +29,4 @@ public class UserRegisterRequest implements Serializable {
     @NotBlank(message = "密码不能为空")
     @Pattern(regexp = "^(?=.*[a-zA-Z])(?=.*\\d)[a-zA-Z\\d]{6,20}$", message = "密码必须包含字母和数字，长度6-20位")
     private String password;
-
-    /**
-     * 确认密码
-     */
-    @NotBlank(message = "确认密码不能为空")
-    private String confirmPassword;
 }
