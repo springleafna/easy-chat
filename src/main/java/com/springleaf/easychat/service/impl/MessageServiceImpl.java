@@ -1,6 +1,7 @@
 package com.springleaf.easychat.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.easychat.enums.ConversationTypeEnum;
 import com.springleaf.easychat.enums.MessageStatusEnum;
@@ -8,6 +9,7 @@ import com.springleaf.easychat.exception.BusinessException;
 import com.springleaf.easychat.mapper.ConversationMapper;
 import com.springleaf.easychat.mapper.GroupMemberMapper;
 import com.springleaf.easychat.mapper.MessageMapper;
+import com.springleaf.easychat.model.dto.MessageHistoryDTO;
 import com.springleaf.easychat.model.dto.SendMessageDTO;
 import com.springleaf.easychat.model.entity.Conversation;
 import com.springleaf.easychat.model.entity.GroupMember;
@@ -16,6 +18,7 @@ import com.springleaf.easychat.model.entity.User;
 import com.springleaf.easychat.model.vo.MessageVO;
 import com.springleaf.easychat.service.MessageService;
 import com.springleaf.easychat.service.UserService;
+import com.springleaf.easychat.utils.UserContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 消息服务实现类
@@ -67,11 +72,11 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         message.setStatus(MessageStatusEnum.NORMAL.getCode()); // 正常状态
 
         // 处理单聊或群聊，设置消息的基本信息（receiverId/groupId 和 conversationId）
-        List<Conversation> conversationsToUpdate = new ArrayList<>();
-        if (messageDTO.getConversationType() == ConversationTypeEnum.SINGLE.getCode()) {
+        List<Conversation> conversationsToUpdate;
+        if (messageDTO.getConversationType().equals(ConversationTypeEnum.SINGLE.getCode())) {
             // 单聊
             conversationsToUpdate = handlePrivateMessage(message, senderId, messageDTO.getReceiverId());
-        } else if (messageDTO.getConversationType() == ConversationTypeEnum.GROUP.getCode()) {
+        } else if (messageDTO.getConversationType().equals(ConversationTypeEnum.GROUP.getCode())) {
             // 群聊
             conversationsToUpdate = handleGroupMessage(message, senderId, messageDTO.getGroupId());
         } else {
@@ -216,15 +221,117 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         }
 
         // 单聊时必须有接收者ID
-        if (messageDTO.getConversationType() == ConversationTypeEnum.SINGLE.getCode()
+        if (messageDTO.getConversationType().equals(ConversationTypeEnum.SINGLE.getCode())
             && messageDTO.getReceiverId() == null) {
             throw new BusinessException("单聊时接收者ID不能为空");
         }
 
         // 群聊时必须有群组ID
-        if (messageDTO.getConversationType() == ConversationTypeEnum.GROUP.getCode()
+        if (messageDTO.getConversationType().equals(ConversationTypeEnum.GROUP.getCode())
             && messageDTO.getGroupId() == null) {
             throw new BusinessException("群聊时群组ID不能为空");
         }
+    }
+
+    @Override
+    public Page<MessageVO> getMessageHistory(MessageHistoryDTO queryDTO) {
+        // 1. 获取当前登录用户ID
+        Long currentUserId = UserContextUtil.getCurrentUserId();
+
+        // 2. 查询会话，验证会话是否存在且用户有权限访问
+        Conversation conversation = conversationMapper.selectById(queryDTO.getConversationId());
+        if (conversation == null) {
+            throw new BusinessException("会话不存在");
+        }
+
+        // 3. 验证用户是否有权限访问该会话
+        if (!conversation.getUserId().equals(currentUserId)) {
+            throw new BusinessException("无权访问此会话");
+        }
+
+        // 4. 首次加载消息时（page=1 或没有lastMessageId），自动标记会话为已读
+        if ((queryDTO.getLastMessageId() == null && queryDTO.getPage() == 1)
+            && conversation.getUnreadCount() != null
+            && conversation.getUnreadCount() > 0) {
+            conversation.setUnreadCount(0);
+            conversationMapper.updateById(conversation);
+            log.info("自动标记会话为已读，会话ID: {}, 用户ID: {}", queryDTO.getConversationId(), currentUserId);
+        }
+
+        // 5. 构建查询条件
+        LambdaQueryWrapper<Message> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(Message::getConversationId, queryDTO.getConversationId())
+                    .ne(Message::getStatus, MessageStatusEnum.DELETED.getCode()) // 排除已删除的消息
+                    .orderByDesc(Message::getCreatedAt); // 按时间倒序（最新的在前）
+
+        // 6. 如果提供了 lastMessageId，使用游标分页（推荐）
+        if (queryDTO.getLastMessageId() != null) {
+            Message lastMessage = this.getById(queryDTO.getLastMessageId());
+            if (lastMessage != null) {
+                // 查询比这条消息更早的消息（ID 更小或时间更早）
+                queryWrapper.lt(Message::getId, queryDTO.getLastMessageId());
+            }
+        }
+
+        // 7. 执行分页查询
+        Page<Message> messagePage = new Page<>(queryDTO.getPage(), queryDTO.getSize());
+        messagePage = this.page(messagePage, queryWrapper);
+
+        // 8. 转换为 MessageVO 并填充发送者信息
+        List<MessageVO> messageVOList = convertToMessageVOList(messagePage.getRecords());
+
+        // 9. 构建分页结果
+        Page<MessageVO> resultPage = new Page<>(messagePage.getCurrent(), messagePage.getSize(), messagePage.getTotal());
+        resultPage.setRecords(messageVOList);
+
+        log.info("查询历史消息成功，会话ID: {}, 用户ID: {}, 当前页: {}, 每页大小: {}, 总数: {}",
+                queryDTO.getConversationId(), currentUserId, messagePage.getCurrent(),
+                messagePage.getSize(), messagePage.getTotal());
+
+        return resultPage;
+    }
+
+    /**
+     * 将 Message 列表转换为 MessageVO 列表，并填充发送者信息
+     */
+    private List<MessageVO> convertToMessageVOList(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 1. 收集所有发送者ID
+        List<Long> senderIds = messages.stream()
+                .map(Message::getSenderId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // 2. 批量查询发送者信息
+        Map<Long, User> userMap = userService.listByIds(senderIds).stream()
+                .collect(Collectors.toMap(User::getId, user -> user));
+
+        // 3. 转换为 MessageVO 并填充信息
+        List<MessageVO> messageVOList = new ArrayList<>();
+        for (Message message : messages) {
+            MessageVO messageVO = new MessageVO();
+            BeanUtils.copyProperties(message, messageVO);
+
+            // 设置会话类型
+            if (message.getReceiverId() != null) {
+                messageVO.setConversationType(ConversationTypeEnum.SINGLE.getCode());
+            } else if (message.getGroupId() != null) {
+                messageVO.setConversationType(ConversationTypeEnum.GROUP.getCode());
+            }
+
+            // 填充发送者信息
+            User sender = userMap.get(message.getSenderId());
+            if (sender != null) {
+                messageVO.setSenderNickname(sender.getNickname());
+                messageVO.setSenderAvatar(sender.getAvatarUrl());
+            }
+
+            messageVOList.add(messageVO);
+        }
+
+        return messageVOList;
     }
 }

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket 聊天测试</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+<h2>WebSocket 聊天测试</h2>
+
+<div>
+    <label>Token: <input type="text" id="token" size="50"></label>
+    <button onclick="connect()">连接</button>
+    <button onclick="disconnect()">断开</button>
+</div>
+
+<div style="margin-top: 20px;">
+    <h3>发送消息</h3>
+    <label>接收者ID: <input type="number" id="receiverId"></label><br>
+    <label>消息内容: <input type="text" id="content" size="50"></label><br>
+    <button onclick="sendMessage()">发送单聊消息</button>
+</div>
+
+<div style="margin-top: 20px;">
+    <h3>消息记录</h3>
+    <div id="messages" style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px;"></div>
+</div>
+
+<script>
+    let ws = null;
+
+    function connect() {
+        const token = document.getElementById('token').value;
+        if (!token) {
+            alert('请输入 Token');
+            return;
+        }
+
+        ws = new WebSocket(`ws://localhost:8091/ws/chat?token=${token}`);
+
+        ws.onopen = () => {
+            addMessage('系统', '连接成功');
+        };
+
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            if (message.error) {
+                addMessage('错误', message.error);
+            } else {
+                addMessage(message.senderNickname, message.content);
+            }
+        };
+
+        ws.onerror = (error) => {
+            addMessage('系统', '连接错误: ' + error);
+        };
+
+        ws.onclose = () => {
+            addMessage('系统', '连接已关闭');
+        };
+    }
+
+    function disconnect() {
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+    }
+
+    function sendMessage() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            alert('未连接到服务器');
+            return;
+        }
+
+        const receiverId = document.getElementById('receiverId').value;
+        const content = document.getElementById('content').value;
+
+        if (!receiverId || !content) {
+            alert('请填写接收者ID和消息内容');
+            return;
+        }
+
+        const message = {
+            messageType: 1,
+            conversationType: 1,
+            receiverId: parseInt(receiverId),
+            content: content
+        };
+
+        ws.send(JSON.stringify(message));
+        document.getElementById('content').value = '';
+    }
+
+    function addMessage(sender, content) {
+        const messagesDiv = document.getElementById('messages');
+        const time = new Date().toLocaleTimeString();
+        messagesDiv.innerHTML += `<div><strong>[${time}] ${sender}:</strong> ${content}</div>`;
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+</script>
+</body>
+</html>

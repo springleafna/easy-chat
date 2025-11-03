@@ -403,6 +403,11 @@ Authorization: {your_token}
 ```
 
 ### 2. 标记会话为已读（清除未读数）
+
+**注意：通常不需要单独调用此接口！**
+
+当用户首次加载聊天历史消息时（调用 `/message/history` 接口），系统会**自动**将会话标记为已读。只有在特殊场景下（例如：用户只想清除未读数但不打开聊天窗口）才需要单独调用此接口。
+
 ```http
 PUT /conversation/read/{conversationId}
 Authorization: {your_token}
@@ -418,10 +423,255 @@ curl -X PUT http://localhost:8091/conversation/read/1 \
 ```json
 {
   "code": 200,
-  "message": "标记已读成功",
+  "message": "操作成功",
   "data": null
 }
 ```
+
+### 3. 获取会话的历史消息（分页）
+
+**重要提示：首次加载消息时，会自动标记会话为已读（清除未读数）！**
+
+```http
+GET /message/history?conversationId={conversationId}&page={page}&size={size}
+Authorization: {your_token}
+```
+
+**自动标记已读的触发条件：**
+- 首次加载消息（page=1 且没有 lastMessageId）
+- 会话有未读消息（unreadCount > 0）
+
+这意味着前端只需要调用获取历史消息的接口，无需额外调用标记已读接口。
+
+#### 方式一：普通分页（基于页码）
+
+**请求参数：**
+- `conversationId`（必填）：会话ID
+- `page`（可选）：页码，从1开始，默认1
+- `size`（可选）：每页大小，默认20，最大100
+
+**示例：**
+```bash
+# 获取第1页，每页20条
+curl -X GET "http://localhost:8091/message/history?conversationId=1&page=1&size=20" \
+  -H "Authorization: your_token_here"
+
+# 获取第2页
+curl -X GET "http://localhost:8091/message/history?conversationId=1&page=2&size=20" \
+  -H "Authorization: your_token_here"
+```
+
+#### 方式二：游标分页（推荐，用于滚动加载）
+
+**请求参数：**
+- `conversationId`（必填）：会话ID
+- `lastMessageId`（必填）：最后一条消息的ID（已加载的最早的一条消息）
+- `size`（可选）：每次加载多少条，默认20
+
+**示例：**
+```bash
+# 首次加载（不需要 lastMessageId）
+curl -X GET "http://localhost:8091/message/history?conversationId=1&size=20" \
+  -H "Authorization: your_token_here"
+
+# 向上滚动加载更多（使用已加载的最早一条消息的ID）
+curl -X GET "http://localhost:8091/message/history?conversationId=1&lastMessageId=100&size=20" \
+  -H "Authorization: your_token_here"
+```
+
+**响应格式：**
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "records": [
+      {
+        "id": 123,
+        "conversationId": 1,
+        "senderId": 2,
+        "senderNickname": "张三",
+        "senderAvatar": "https://example.com/avatar.jpg",
+        "receiverId": 1,
+        "groupId": null,
+        "messageType": 1,
+        "conversationType": 1,
+        "content": "你好，在吗？",
+        "mediaUrl": null,
+        "fileName": null,
+        "fileSize": null,
+        "status": 1,
+        "createdAt": "2025-11-03 14:30:00"
+      },
+      {
+        "id": 122,
+        "conversationId": 1,
+        "senderId": 1,
+        "senderNickname": "我",
+        "senderAvatar": "https://example.com/my-avatar.jpg",
+        "receiverId": 2,
+        "groupId": null,
+        "messageType": 2,
+        "conversationType": 1,
+        "content": null,
+        "mediaUrl": "https://example.com/image.jpg",
+        "fileName": null,
+        "fileSize": null,
+        "status": 1,
+        "createdAt": "2025-11-03 14:28:00"
+      }
+    ],
+    "total": 150,
+    "size": 20,
+    "current": 1,
+    "pages": 8
+  }
+}
+```
+
+**响应字段说明：**
+- `records`：消息列表（按时间倒序，最新的在前）
+- `total`：总消息数
+- `size`：每页大小
+- `current`：当前页码
+- `pages`：总页数
+
+#### 前端滚动加载实现示例
+
+```javascript
+class ChatWindow {
+  constructor(conversationId) {
+    this.conversationId = conversationId;
+    this.messages = []; // 消息列表（按时间正序，最早的在前）
+    this.loading = false;
+    this.hasMore = true;
+    this.pageSize = 20;
+  }
+
+  // 首次加载消息
+  async loadInitialMessages() {
+    const response = await fetch(
+      `/message/history?conversationId=${this.conversationId}&size=${this.pageSize}`,
+      {
+        headers: { 'Authorization': token }
+      }
+    );
+    const result = await response.json();
+
+    if (result.code === 200) {
+      // 接口返回的是倒序（最新的在前），需要反转成正序（最早的在前）
+      this.messages = result.data.records.reverse();
+      this.hasMore = result.data.current < result.data.pages;
+
+      // 渲染消息并滚动到底部
+      this.renderMessages();
+      this.scrollToBottom();
+    }
+  }
+
+  // 向上滚动加载更多历史消息
+  async loadMoreMessages() {
+    if (this.loading || !this.hasMore) return;
+
+    this.loading = true;
+
+    // 获取当前已加载的最早一条消息的ID
+    const oldestMessageId = this.messages[0]?.id;
+
+    if (!oldestMessageId) {
+      this.loading = false;
+      return;
+    }
+
+    const response = await fetch(
+      `/message/history?conversationId=${this.conversationId}&lastMessageId=${oldestMessageId}&size=${this.pageSize}`,
+      {
+        headers: { 'Authorization': token }
+      }
+    );
+    const result = await response.json();
+
+    if (result.code === 200) {
+      const newMessages = result.data.records.reverse();
+
+      // 保存当前滚动位置
+      const scrollHeight = this.chatContainer.scrollHeight;
+
+      // 将新消息插入到数组前面
+      this.messages = [...newMessages, ...this.messages];
+
+      // 渲染消息
+      this.renderMessages();
+
+      // 保持滚动位置（避免跳动）
+      const newScrollHeight = this.chatContainer.scrollHeight;
+      this.chatContainer.scrollTop = newScrollHeight - scrollHeight;
+
+      // 更新状态
+      this.hasMore = result.data.current < result.data.pages;
+    }
+
+    this.loading = false;
+  }
+
+  // 监听滚动事件
+  setupScrollListener() {
+    this.chatContainer.addEventListener('scroll', () => {
+      // 滚动到顶部时加载更多
+      if (this.chatContainer.scrollTop < 100) {
+        this.loadMoreMessages();
+      }
+    });
+  }
+
+  // 接收到新消息（通过WebSocket）
+  onNewMessage(message) {
+    // 将新消息添加到数组末尾
+    this.messages.push(message);
+    this.renderMessages();
+    this.scrollToBottom();
+  }
+
+  renderMessages() {
+    // 渲染消息到UI
+    // ...
+  }
+
+  scrollToBottom() {
+    this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+  }
+}
+
+// 使用示例
+const chatWindow = new ChatWindow(conversationId);
+chatWindow.loadInitialMessages();
+chatWindow.setupScrollListener();
+```
+
+#### 两种分页方式对比
+
+| 特性 | 普通分页（page） | 游标分页（lastMessageId） |
+|------|----------------|------------------------|
+| **适用场景** | 查看历史记录、跳页浏览 | 聊天窗口滚动加载 |
+| **优点** | 可以跳转到任意页 | 性能好，数据一致性强 |
+| **缺点** | 数据插入时页码会偏移 | 不能跳页，只能连续加载 |
+| **推荐度** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐（强烈推荐） |
+
+**为什么推荐游标分页？**
+
+假设场景：你正在查看第2页的消息，此时新消息不断到来：
+
+- **普通分页**：
+  - 第1页：消息1-20
+  - 第2页：消息21-40
+  - *此时新消息插入*
+  - 再次请求第2页：消息22-41（消息21被挤到第1页了）❌ 数据重复！
+
+- **游标分页**：
+  - 请求：`lastMessageId=40`
+  - 返回：比40更早的消息（39, 38, 37...）
+  - *无论新消息如何插入，都不影响*
+  - 结果始终一致 ✅
 
 ### 未读消息处理流程
 
@@ -436,69 +686,72 @@ curl -X PUT http://localhost:8091/conversation/read/1 \
    ↓
 3. 用户A点击"张三"的会话
    ↓
-4. 前端立即发送请求标记已读
-   PUT /conversation/read/1
+4. 前端加载历史消息
+   GET /message/history?conversationId=1&size=20
    ↓
-5. 前端刷新会话列表或本地更新
+5. 后端自动标记会话为已读（unreadCount = 0）✅
+   ↓
+6. 前端收到消息列表 + 会话列表自动更新
    → 显示：张三 (0条未读) ✅
-   ↓
-6. 同时加载历史消息
-   GET /message/history?conversationId=1
 ```
 
 #### 前端实现示例（JavaScript）
 
 ```javascript
 // 用户点击进入聊天窗口
-function enterConversation(conversationId) {
-  // 1. 如果有未读消息，立即标记为已读
-  if (hasUnreadMessages(conversationId)) {
-    markAsRead(conversationId);
-  }
+async function enterConversation(conversationId) {
+  // 只需要加载历史消息，后端会自动标记已读
+  await loadChatWindow(conversationId);
 
-  // 2. 加载聊天界面和历史消息
-  loadChatWindow(conversationId);
+  // 可选：主动刷新会话列表以更新未读数显示
+  // 或者直接在本地更新该会话的 unreadCount = 0
+  updateLocalUnreadCount(conversationId, 0);
 }
 
-// 标记已读
-async function markAsRead(conversationId) {
+// 加载聊天窗口和历史消息
+async function loadChatWindow(conversationId) {
   try {
-    const response = await fetch(`/conversation/read/${conversationId}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': token
+    const response = await fetch(
+      `/message/history?conversationId=${conversationId}&size=20`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': token
+        }
       }
-    });
+    );
 
     if (response.ok) {
-      // 更新本地会话列表的未读数
-      updateLocalUnreadCount(conversationId, 0);
+      const result = await response.json();
+      // 渲染消息列表
+      renderMessages(result.data.records.reverse());
+      // 滚动到底部
+      scrollToBottom();
+
+      // 此时后端已经自动将会话标记为已读
+      // 前端可以更新本地的会话列表状态
     }
   } catch (error) {
-    console.error('标记已读失败', error);
+    console.error('加载聊天失败', error);
   }
 }
 ```
 
 ### 注意事项
 
-1. **时机选择**：
-   - ✅ 用户**点击进入**聊天窗口时调用
-   - ❌ 不要等到用户发送消息时才调用
-   - ❌ 不要在收到消息时自动调用（用户可能没看到）
+1. **自动标记已读的逻辑**：
+   - ✅ 首次加载聊天窗口时自动标记已读
+   - ✅ 向上滚动加载更多历史消息时不会重复标记
+   - ✅ 只在有未读消息时才更新数据库，避免不必要的操作
 
 2. **权限验证**：
    - 接口会验证会话是否属于当前用户
-   - 防止用户标记别人的会话为已读
+   - 防止用户查看他人的聊天记录
 
-3. **幂等性**：
-   - 如果未读数已经是0，不会更新数据库
-   - 可以多次调用同一个会话的已读接口
-
-4. **与WebSocket的配合**：
-   - WebSocket：实时推送消息，增加未读数
-   - HTTP API：用户主动标记已读，清除未读数
-   - 两者独立工作，互不干扰
+3. **与WebSocket的配合**：
+   - WebSocket：实时推送新消息，增加未读数
+   - HTTP API：查看历史消息时自动清除未读数
+   - 两者配合实现完整的未读消息管理
 
 ### 待实现的其他接口
 
