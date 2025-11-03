@@ -45,7 +45,7 @@ public class ChatWebSocketHandler implements WebSocketHandler {
      * WebSocket 连接建立后
      */
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    public void afterConnectionEstablished(WebSocketSession session) {
         Long userId = (Long) session.getAttributes().get("userId");
         if (userId != null) {
             ONLINE_USERS.put(userId, session);

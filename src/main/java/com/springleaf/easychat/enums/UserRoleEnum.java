@@ -9,6 +9,7 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum UserRoleEnum {
+
     /**
      * 普通用户
      */

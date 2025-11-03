@@ -402,33 +402,8 @@ Authorization: {your_token}
 }
 ```
 
-### 2. 标记会话为已读（清除未读数）
 
-**注意：通常不需要单独调用此接口！**
-
-当用户首次加载聊天历史消息时（调用 `/message/history` 接口），系统会**自动**将会话标记为已读。只有在特殊场景下（例如：用户只想清除未读数但不打开聊天窗口）才需要单独调用此接口。
-
-```http
-PUT /conversation/read/{conversationId}
-Authorization: {your_token}
-```
-
-**示例：**
-```bash
-curl -X PUT http://localhost:8091/conversation/read/1 \
-  -H "Authorization: your_token_here"
-```
-
-**响应：**
-```json
-{
-  "code": 200,
-  "message": "操作成功",
-  "data": null
-}
-```
-
-### 3. 获取会话的历史消息（分页）
+### 2. 获取会话的历史消息（分页）
 
 **重要提示：首次加载消息时，会自动标记会话为已读（清除未读数）！**
 
@@ -761,3 +736,87 @@ async function loadChatWindow(conversationId) {
 - `DELETE /message/{id}` - 删除消息
 - `PUT /message/{id}/recall` - 撤回消息
 - `DELETE /conversation/{id}` - 删除会话
+
+
+---
+
+### ✅ 1. **WebSocketConfig 是 WebSocket 的配置类**
+- 使用了 `@EnableWebSocket` 和实现了 `WebSocketConfigurer`，这是 Spring WebSocket 的标准配置方式。
+- 通过 `registry.addHandler(...)` 注册了：
+    - **处理器**：`ChatWebSocketHandler`，负责处理路径为 `/ws/chat` 的 WebSocket 连接。
+    - **拦截器**：`WebSocketHandshakeInterceptor`，在握手阶段（即连接建立前）执行。
+
+---
+
+### ✅ 2. **握手拦截器（WebSocketHandshakeInterceptor）的作用**
+- 在 `beforeHandshake` 中：
+    - 从 URL 查询参数（如 `?token=xxx`）中提取 token。
+    - 使用 Sa-Token 的 `StpUtil.getLoginIdByToken(token)` 验证 token 并获取用户 ID。
+    - 将 `userId` 存入 `attributes`（即 `WebSocketSession.getAttributes()` 的来源）。
+- 如果 token 无效或缺失，返回 `false`，**拒绝 WebSocket 连接**。
+- ✅ 这保证了**只有认证用户才能建立 WebSocket 连接**。
+
+---
+
+### ✅ 3. **ChatWebSocketHandler 的核心逻辑**
+- **连接建立时（`afterConnectionEstablished`）**：
+    - 从 `session.getAttributes()` 中取出 `userId`。
+    - 存入静态的 `ONLINE_USERS`（`ConcurrentHashMap<Long, WebSocketSession>`）。
+    - ✅ 实现了“在线用户管理”。
+- **收到消息时（`handleMessage`）**：
+    - 解析 `SendMessageDTO`，补充 `senderId`。
+    - 调用 `messageService.sendMessage(...)` 处理业务（保存消息、校验权限等）。
+    - 调用 `pushMessage(...)` 向目标用户/群组推送消息。
+- **连接关闭时（`afterConnectionClosed`）**：
+    - 从 `ONLINE_USERS` 中移除用户，✅ 实现了“离线状态同步”。
+
+---
+
+### ✅ 4. **消息推送机制（`pushMessage`）**
+- **单聊（conversationType == 1）**：
+    - 查找接收者的 `WebSocketSession`，如果在线则推送。
+- **群聊（conversationType == 2）**：
+    - 查询群成员列表，遍历所有成员，对在线者推送消息。
+- ✅ 支持“在线实时推送，离线不推送（消息已存库）”的常见聊天逻辑。
+
+---
+
+### ✅ 补充说明：数据流完整链路
+```text
+1. 前端连接：ws://your-domain/ws/chat?token=xxx
+        ↓
+2. WebSocketHandshakeInterceptor 拦截 → 验证 token → 提取 userId → 存入 attributes
+        ↓
+3. 连接成功 → ChatWebSocketHandler.afterConnectionEstablished()
+                → 保存 session 到 ONLINE_USERS
+        ↓
+4. 前端发送消息 → handleMessage() → 解析 → 业务处理 → pushMessage()
+        ↓
+5. 根据会话类型 → 推送给在线的接收者（单聊/群聊）
+```
+
+---
+
+### ⚠️ 潜在优化建议（非错误，仅增强）
+虽然你的理解完全正确，但实际部署时可考虑以下几点：
+
+1. **Token 传递方式更安全**：
+    - 目前 token 通过 URL 查询参数传递（`?token=xxx`），**可能被日志记录或代理泄露**。
+    - 更安全的方式：通过 `Sec-WebSocket-Protocol` 头或自定义子协议传递（但前端需配合）。
+
+2. **在线用户 Map 的内存泄漏风险**：
+    - 虽然连接关闭时会移除，但如果异常断开（如网络闪断），可能残留。
+    - 可结合心跳机制（`@Scheduled` 定时清理无效 session）。
+
+3. **群聊性能**：
+    - 如果群成员极大（如万人群），`groupMemberMapper.selectList(...)` 可能慢。
+    - 可考虑缓存群成员列表（如 Redis），或分页推送（但通常聊天群规模不大）。
+
+4. **错误消息格式统一**：
+    - 当前错误返回是 `{ "error": "xxx" }`，建议与正常消息格式区分字段，便于前端判断。
+
+---
+### Map<String, Object> attributes的作用
+`Map<String, Object> attributes` 是 Spring WebSocket 在握手阶段提供的一组会话属性，  
+用于在连接建立前由拦截器（如 `WebSocketHandshakeInterceptor`）向后续的 `WebSocketSession` 传递自定义数据（如用户 ID、角色等），  
+这些数据会在连接建立后通过 `session.getAttributes()` 被 `WebSocketHandler` 获取和使用，从而实现身份信息的透传与会话上下文的共享。
