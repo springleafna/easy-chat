@@ -123,8 +123,6 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         Conversation senderConversation = findOrCreateConversation(senderId, receiverId, ConversationTypeEnum.SINGLE.getCode());
         Conversation receiverConversation = findOrCreateConversation(receiverId, senderId, ConversationTypeEnum.SINGLE.getCode());
 
-        message.setConversationId(senderConversation.getId());
-
         // 返回需要更新的会话列表（在消息保存后再更新）
         List<Conversation> conversations = new ArrayList<>();
         conversations.add(senderConversation);
@@ -152,10 +150,6 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         }
 
         message.setGroupId(groupId);
-
-        // 查找或创建发送者的会话
-        Conversation senderConversation = findOrCreateConversation(senderId, groupId, ConversationTypeEnum.GROUP.getCode());
-        message.setConversationId(senderConversation.getId());
 
         // 查询所有群成员，为每个成员创建或更新会话
         LambdaQueryWrapper<GroupMember> memberWrapper = new LambdaQueryWrapper<>();
@@ -258,11 +252,27 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             log.info("自动标记会话为已读，会话ID: {}, 用户ID: {}", queryDTO.getConversationId(), currentUserId);
         }
 
-        // 5. 构建查询条件
+        // 5. 根据会话类型构建查询条件
         LambdaQueryWrapper<Message> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Message::getConversationId, queryDTO.getConversationId())
-                    .ne(Message::getStatus, MessageStatusEnum.DELETED.getCode()) // 排除已删除的消息
+        queryWrapper.ne(Message::getStatus, MessageStatusEnum.DELETED.getCode()) // 排除已删除的消息
                     .orderByDesc(Message::getCreatedAt); // 按时间倒序（最新的在前）
+
+        // 单聊：查询双方的消息
+        if (ConversationTypeEnum.SINGLE.getCode().equals(conversation.getType())) {
+            Long targetId = conversation.getTargetId();
+            // 查询条件：(sender=我 AND receiver=对方) OR (sender=对方 AND receiver=我)
+            queryWrapper.and(wrapper -> wrapper
+                .and(w -> w.eq(Message::getSenderId, currentUserId).eq(Message::getReceiverId, targetId))
+                .or(w -> w.eq(Message::getSenderId, targetId).eq(Message::getReceiverId, currentUserId))
+            );
+        }
+        // 群聊：查询该群的所有消息
+        else if (ConversationTypeEnum.GROUP.getCode().equals(conversation.getType())) {
+            Long groupId = conversation.getTargetId();
+            queryWrapper.eq(Message::getGroupId, groupId);
+        } else {
+            throw new BusinessException("无效的会话类型");
+        }
 
         // 6. 如果提供了 lastMessageId，使用游标分页（推荐）
         if (queryDTO.getLastMessageId() != null) {

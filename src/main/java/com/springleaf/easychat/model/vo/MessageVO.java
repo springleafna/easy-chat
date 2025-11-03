@@ -15,11 +15,6 @@ public class MessageVO {
     private Long id;
 
     /**
-     * 会话ID
-     */
-    private Long conversationId;
-
-    /**
      * 发送者ID
      */
     private Long senderId;

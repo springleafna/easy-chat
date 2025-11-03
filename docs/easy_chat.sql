@@ -35,7 +35,7 @@ CREATE TABLE friends (
     INDEX idx_friend_id (friend_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='好友表';
 
-CREATE TABLE groups (
+CREATE TABLE `groups` (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '群组ID',
     group_name VARCHAR(100) NOT NULL COMMENT '群名称',
     owner_id BIGINT NOT NULL COMMENT '群主ID',
@@ -82,7 +82,6 @@ CREATE TABLE conversations (
 
 CREATE TABLE messages (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息ID',
-    conversation_id BIGINT NOT NULL COMMENT '会话ID',
     sender_id BIGINT NOT NULL COMMENT '发送者ID',
     receiver_id BIGINT COMMENT '接收者ID（单聊时使用）',
     group_id BIGINT COMMENT '群组ID（群聊时使用）',
@@ -95,9 +94,9 @@ CREATE TABLE messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    INDEX idx_conversation_id (conversation_id),
-    INDEX idx_sender_id (sender_id),
-    INDEX idx_receiver_id (receiver_id),
-    INDEX idx_group_id (group_id),
-    INDEX idx_created_at (created_at)
+    INDEX idx_sender_created (sender_id, created_at DESC),
+    INDEX idx_receiver_created (receiver_id, created_at DESC),
+    INDEX idx_group_created (group_id, created_at DESC),
+    INDEX idx_sender_receiver_created (sender_id, receiver_id, created_at DESC),
+    INDEX idx_status_created (status, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='消息表';

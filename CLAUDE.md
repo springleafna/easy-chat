@@ -79,7 +79,7 @@ Mapper（数据访问层）
 - **`service/`** 和 `service/impl/` - 业务逻辑层
   - Service 接口定义业务方法
   - impl 包含具体实现
-  - **MessageService**：消息发送、历史查询（自动标记已读）
+  - **MessageService**：消息发送、历史查询
   - **ConversationService**：会话列表查询、已读管理
 
 - **`mapper/`** - MyBatis-Plus 数据访问层
@@ -157,7 +157,6 @@ Mapper（数据访问层）
 - **消息路由**：
   - 单聊：根据 `receiverId` 查找目标用户的 WebSocket 会话并推送
   - 群聊：查询群成员列表，遍历推送给所有在线成员
-- **详细文档**：参见 `WEBSOCKET_TEST.md`
 
 **6. 消息与会话管理**
 - **消息发送流程**：
@@ -181,8 +180,13 @@ Mapper（数据访问层）
 - **索引建议**：
   ```sql
   -- 消息表索引（提升历史查询性能）
-  CREATE INDEX idx_conversation_created ON messages(conversation_id, created_at DESC);
-  CREATE INDEX idx_conversation_id ON messages(conversation_id, id DESC);
+  -- 单聊查询索引
+  CREATE INDEX idx_messages_sender_receiver_time ON messages(sender_id, receiver_id, created_at DESC);
+  CREATE INDEX idx_messages_receiver_sender_time ON messages(receiver_id, sender_id, created_at DESC);
+  -- 群聊查询索引
+  CREATE INDEX idx_messages_group_time ON messages(group_id, created_at DESC);
+  -- 消息状态索引
+  CREATE INDEX idx_messages_status ON messages(status);
   ```
 
 ## 数据库说明
@@ -193,20 +197,21 @@ Mapper（数据访问层）
 - **groups**：群组表
 - **group_members**：群成员表
 - **messages**：消息表（存储所有聊天消息）
-  - `conversation_id`：关联会话
-  - `sender_id`：发送者
-  - `receiver_id`：接收者（单聊）
-  - `group_id`：群组ID（群聊）
-  - `message_type`：消息类型（文本、图片、语音等）
-  - `content`：消息内容
-  - `status`：消息状态（正常、已撤回、已删除）
-- **conversations**：会话表（单聊/群聊会话管理）
-  - `user_id`：会话所属用户
-  - `target_id`：目标ID（单聊为对方user_id，群聊为group_id）
-  - `type`：会话类型（1-单聊，2-群聊）
-  - `unread_count`：未读消息数
-  - `last_message_id`：最后一条消息ID
-  - `last_message_time`：最后消息时间
+- **conversations**：会话表（单聊/群聊会话管理）  
+具体sql参考/docs/easy_chat.sql
+### 表结构设计说明
+
+**消息表与会话表的关系**：
+- ✅ **messages 表是独立的消息存储单元**，不直接关联 conversation_id
+- ✅ **查询单聊消息**：通过 `(sender_id, receiver_id)` 组合查询双方的完整对话
+  ```sql
+  WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+  ```
+- ✅ **查询群聊消息**：通过 `group_id` 查询该群的所有消息
+  ```sql
+  WHERE group_id = ?
+  ```
+- ✅ **conversations 表只保存会话元数据**（未读数、最后消息预览等），不存储消息内容
 
 ### 时区配置
 - Jackson 时区设置为 GMT+8
@@ -275,7 +280,7 @@ Mapper（数据访问层）
 ### 添加新的 API 端点
 1. 在 Controller 中定义接口方法，使用 `@RestController` 和 `@RequestMapping`
 2. 返回值统一使用 `Result<T>` 封装
-3. 如果不需要认证，在 `SaTokenConfig.java:21-25` 添加到 `excludePathPatterns`
+3. 如果不需要认证，在 `SaTokenConfig.java:32-36` 添加到 `excludePathPatterns`
 4. 使用 `@Validated` 和 DTO 进行参数校验
 5. WebSocket 路径无需添加到排除列表（通过握手拦截器处理认证）
 
@@ -322,22 +327,5 @@ Mapper（数据访问层）
 - **原因**：使用普通分页（page），新消息插入导致页码偏移
 - **解决**：使用游标分页（`lastMessageId`），参考 `MessageHistoryDTO`
 
-## 测试指南
-
-### WebSocket 测试工具
-1. **Postman**：支持 WebSocket 请求，推荐使用
-2. **浏览器控制台**：使用 JavaScript `new WebSocket(url)` 测试
-3. **在线工具**：websocket.org、websocket-test.com
-4. **HTML 测试页面**：参考 `WEBSOCKET_TEST.md` 中的示例代码
-
-### 测试流程
-1. 启动应用：`mvn spring-boot:run`
-2. 登录获取 token：`POST /user/login`
-3. 建立 WebSocket 连接：`ws://localhost:8091/ws/chat?token=xxx`
-4. 发送测试消息（JSON 格式）
-5. 验证消息保存到数据库、会话更新、实时推送等功能
-
 ### 参考文档
-- **WebSocket 使用文档**：`WEBSOCKET_TEST.md`（包含完整的测试示例和前端代码）
-- **API 文档**：可使用 Swagger/Knife4j 生成（需添加依赖）
-- **数据库脚本**：见 `sql/` 目录（如有）
+- **数据库脚本**：见 `docs/easy_chat.sql/` 
