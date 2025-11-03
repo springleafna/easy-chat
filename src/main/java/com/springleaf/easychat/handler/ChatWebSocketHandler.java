@@ -66,9 +66,10 @@ public class ChatWebSocketHandler implements WebSocketHandler {
                 // 解析消息
                 SendMessageDTO messageDTO = objectMapper.readValue(payload, SendMessageDTO.class);
                 Long senderId = (Long) session.getAttributes().get("userId");
+                messageDTO.setSenderId(senderId);
 
                 // 发送消息（通过 Service 层处理业务逻辑）
-                MessageVO messageVO = messageService.sendMessage(senderId, messageDTO);
+                MessageVO messageVO = messageService.sendMessage(messageDTO);
 
                 // 推送消息给接收者
                 pushMessage(messageVO);

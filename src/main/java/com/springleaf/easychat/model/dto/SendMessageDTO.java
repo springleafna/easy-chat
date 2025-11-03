@@ -22,6 +22,12 @@ public class SendMessageDTO {
     private Integer conversationType;
 
     /**
+     * 发送者ID
+     */
+    @NotNull(message = "发送者ID不能为空")
+    private Long senderId;
+
+    /**
      * 接收者ID（单聊时使用）
      */
     private Long receiverId;

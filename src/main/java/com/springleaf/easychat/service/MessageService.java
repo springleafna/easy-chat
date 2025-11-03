@@ -15,11 +15,10 @@ public interface MessageService extends IService<Message> {
     /**
      * 发送消息（单聊或群聊）
      *
-     * @param senderId 发送者ID
      * @param messageDTO 消息DTO
      * @return 消息VO
      */
-    MessageVO sendMessage(Long senderId, SendMessageDTO messageDTO);
+    MessageVO sendMessage(SendMessageDTO messageDTO);
 
     /**
      * 分页查询会话的历史消息

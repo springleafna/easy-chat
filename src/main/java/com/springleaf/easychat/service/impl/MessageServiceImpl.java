@@ -51,9 +51,10 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public MessageVO sendMessage(Long senderId, SendMessageDTO messageDTO) {
+    public MessageVO sendMessage(SendMessageDTO messageDTO) {
         // 验证参数
         validateMessageDTO(messageDTO);
+        Long senderId = messageDTO.getSenderId();
 
         // 获取发送者信息
         User sender = userService.getById(senderId);
