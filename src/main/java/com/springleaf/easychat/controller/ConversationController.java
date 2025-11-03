@@ -4,9 +4,7 @@ import com.springleaf.easychat.common.Result;
 import com.springleaf.easychat.model.vo.ConversationVO;
 import com.springleaf.easychat.service.ConversationService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import java.util.List;
@@ -31,5 +29,17 @@ public class ConversationController {
     public Result<List<ConversationVO>> getConversationList() {
         List<ConversationVO> conversationList = conversationService.getConversationList();
         return Result.success(conversationList);
+    }
+
+    /**
+     * 标记会话为已读
+     *
+     * @param conversationId 会话ID
+     * @return 操作结果
+     */
+    @PutMapping("/read/{conversationId}")
+    public Result<Void> markAsRead(@PathVariable Long conversationId) {
+        conversationService.markAsRead(conversationId);
+        return Result.success();
     }
 }

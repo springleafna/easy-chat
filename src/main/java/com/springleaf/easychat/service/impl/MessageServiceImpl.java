@@ -22,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 消息服务实现类
@@ -64,19 +66,25 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         message.setFileSize(messageDTO.getFileSize());
         message.setStatus(MessageStatusEnum.NORMAL.getCode()); // 正常状态
 
-        // 处理单聊或群聊
+        // 处理单聊或群聊，设置消息的基本信息（receiverId/groupId 和 conversationId）
+        List<Conversation> conversationsToUpdate = new ArrayList<>();
         if (messageDTO.getConversationType() == ConversationTypeEnum.SINGLE.getCode()) {
             // 单聊
-            handlePrivateMessage(message, senderId, messageDTO.getReceiverId());
+            conversationsToUpdate = handlePrivateMessage(message, senderId, messageDTO.getReceiverId());
         } else if (messageDTO.getConversationType() == ConversationTypeEnum.GROUP.getCode()) {
             // 群聊
-            handleGroupMessage(message, senderId, messageDTO.getGroupId());
+            conversationsToUpdate = handleGroupMessage(message, senderId, messageDTO.getGroupId());
         } else {
             throw new BusinessException("无效的会话类型");
         }
 
-        // 保存消息
+        // 保存消息（此时会生成消息ID）
         this.save(message);
+
+        // 消息保存成功后，更新相关会话的最后消息信息
+        for (Conversation conversation : conversationsToUpdate) {
+            updateConversation(conversation, message);
+        }
 
         // 构建返回的 MessageVO
         MessageVO messageVO = new MessageVO();
@@ -91,8 +99,9 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
 
     /**
      * 处理单聊消息
+     * @return 需要更新的会话列表
      */
-    private void handlePrivateMessage(Message message, Long senderId, Long receiverId) {
+    private List<Conversation> handlePrivateMessage(Message message, Long senderId, Long receiverId) {
         if (receiverId == null) {
             throw new BusinessException("接收者ID不能为空");
         }
@@ -111,15 +120,18 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
 
         message.setConversationId(senderConversation.getId());
 
-        // 更新会话信息（消息发送后再更新）
-        updateConversation(senderConversation, message);
-        updateConversation(receiverConversation, message);
+        // 返回需要更新的会话列表（在消息保存后再更新）
+        List<Conversation> conversations = new ArrayList<>();
+        conversations.add(senderConversation);
+        conversations.add(receiverConversation);
+        return conversations;
     }
 
     /**
      * 处理群聊消息
+     * @return 需要更新的会话列表
      */
-    private void handleGroupMessage(Message message, Long senderId, Long groupId) {
+    private List<Conversation> handleGroupMessage(Message message, Long senderId, Long groupId) {
         if (groupId == null) {
             throw new BusinessException("群组ID不能为空");
         }
@@ -136,12 +148,22 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
 
         message.setGroupId(groupId);
 
-        // 查找或创建会话
-        Conversation conversation = findOrCreateConversation(senderId, groupId, ConversationTypeEnum.GROUP.getCode());
-        message.setConversationId(conversation.getId());
+        // 查找或创建发送者的会话
+        Conversation senderConversation = findOrCreateConversation(senderId, groupId, ConversationTypeEnum.GROUP.getCode());
+        message.setConversationId(senderConversation.getId());
 
-        // 更新会话信息
-        updateConversation(conversation, message);
+        // 查询所有群成员，为每个成员创建或更新会话
+        LambdaQueryWrapper<GroupMember> memberWrapper = new LambdaQueryWrapper<>();
+        memberWrapper.eq(GroupMember::getGroupId, groupId);
+        List<GroupMember> groupMembers = groupMemberMapper.selectList(memberWrapper);
+
+        List<Conversation> conversations = new ArrayList<>();
+        for (GroupMember member : groupMembers) {
+            Conversation memberConversation = findOrCreateConversation(member.getUserId(), groupId, ConversationTypeEnum.GROUP.getCode());
+            conversations.add(memberConversation);
+        }
+
+        return conversations;
     }
 
     /**

@@ -366,10 +366,145 @@ ws.onmessage = (event) => {
 
 ## REST API 补充
 
-虽然 WebSocket 用于实时通讯，但可能还需要以下 REST API（待实现）：
+除了 WebSocket 实时通讯，还需要以下 REST API 配合使用：
 
-- `GET /message/history?conversationId={id}` - 获取历史消息
-- `GET /conversation/list` - 获取会话列表
-- `POST /conversation/read/{conversationId}` - 标记会话为已读
+### 1. 获取会话列表
+```http
+GET /conversation/list
+Authorization: {your_token}
+```
+
+**响应示例：**
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "id": 1,
+      "type": 1,
+      "conversationName": "张三",
+      "avatarUrl": "https://example.com/avatar.jpg",
+      "unreadCount": 5,
+      "lastMessageContent": "你好，在吗？",
+      "lastMessageTime": "2025-11-03 14:30:00"
+    },
+    {
+      "id": 2,
+      "type": 2,
+      "conversationName": "技术交流群",
+      "avatarUrl": "https://example.com/group.jpg",
+      "unreadCount": 0,
+      "lastMessageContent": "[图片]",
+      "lastMessageTime": "2025-11-03 14:25:00"
+    }
+  ]
+}
+```
+
+### 2. 标记会话为已读（清除未读数）
+```http
+PUT /conversation/read/{conversationId}
+Authorization: {your_token}
+```
+
+**示例：**
+```bash
+curl -X PUT http://localhost:8091/conversation/read/1 \
+  -H "Authorization: your_token_here"
+```
+
+**响应：**
+```json
+{
+  "code": 200,
+  "message": "标记已读成功",
+  "data": null
+}
+```
+
+### 未读消息处理流程
+
+#### 完整的用户交互流程：
+
+```
+1. 用户A打开APP
+   ↓
+2. 建立WebSocket连接 + 获取会话列表
+   GET /conversation/list
+   → 显示：张三 (5条未读)
+   ↓
+3. 用户A点击"张三"的会话
+   ↓
+4. 前端立即发送请求标记已读
+   PUT /conversation/read/1
+   ↓
+5. 前端刷新会话列表或本地更新
+   → 显示：张三 (0条未读) ✅
+   ↓
+6. 同时加载历史消息
+   GET /message/history?conversationId=1
+```
+
+#### 前端实现示例（JavaScript）
+
+```javascript
+// 用户点击进入聊天窗口
+function enterConversation(conversationId) {
+  // 1. 如果有未读消息，立即标记为已读
+  if (hasUnreadMessages(conversationId)) {
+    markAsRead(conversationId);
+  }
+
+  // 2. 加载聊天界面和历史消息
+  loadChatWindow(conversationId);
+}
+
+// 标记已读
+async function markAsRead(conversationId) {
+  try {
+    const response = await fetch(`/conversation/read/${conversationId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': token
+      }
+    });
+
+    if (response.ok) {
+      // 更新本地会话列表的未读数
+      updateLocalUnreadCount(conversationId, 0);
+    }
+  } catch (error) {
+    console.error('标记已读失败', error);
+  }
+}
+```
+
+### 注意事项
+
+1. **时机选择**：
+   - ✅ 用户**点击进入**聊天窗口时调用
+   - ❌ 不要等到用户发送消息时才调用
+   - ❌ 不要在收到消息时自动调用（用户可能没看到）
+
+2. **权限验证**：
+   - 接口会验证会话是否属于当前用户
+   - 防止用户标记别人的会话为已读
+
+3. **幂等性**：
+   - 如果未读数已经是0，不会更新数据库
+   - 可以多次调用同一个会话的已读接口
+
+4. **与WebSocket的配合**：
+   - WebSocket：实时推送消息，增加未读数
+   - HTTP API：用户主动标记已读，清除未读数
+   - 两者独立工作，互不干扰
+
+### 待实现的其他接口
+
+以下接口可以根据需要实现：
+
+- `GET /message/history?conversationId={id}&page={page}&size={size}` - 获取历史消息（分页）
 - `DELETE /message/{id}` - 删除消息
 - `PUT /message/{id}/recall` - 撤回消息
+- `DELETE /conversation/{id}` - 删除会话

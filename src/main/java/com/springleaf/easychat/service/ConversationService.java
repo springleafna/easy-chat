@@ -17,4 +17,11 @@ public interface ConversationService extends IService<Conversation> {
      * @return 会话列表
      */
     List<ConversationVO> getConversationList();
+
+    /**
+     * 标记会话为已读（清除未读消息数）
+     *
+     * @param conversationId 会话ID
+     */
+    void markAsRead(Long conversationId);
 }
