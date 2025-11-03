@@ -1,24 +1,17 @@
-package com.springleaf.easychat.model.entity;
+package com.springleaf.easychat.model.vo;
 
-import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
-
-import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 消息实体类
+ * WebSocket 消息 VO
  */
 @Data
-@TableName("messages")
-public class Message implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class MessageVO {
 
     /**
      * 消息ID
      */
-    @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
@@ -30,6 +23,16 @@ public class Message implements Serializable {
      * 发送者ID
      */
     private Long senderId;
+
+    /**
+     * 发送者昵称
+     */
+    private String senderNickname;
+
+    /**
+     * 发送者头像
+     */
+    private String senderAvatar;
 
     /**
      * 接收者ID（单聊时使用）
@@ -45,6 +48,11 @@ public class Message implements Serializable {
      * 消息类型：1-文本，2-图片，3-语音，4-视频，5-文件，6-位置，7-系统消息
      */
     private Integer messageType;
+
+    /**
+     * 会话类型：1-单聊，2-群聊
+     */
+    private Integer conversationType;
 
     /**
      * 消息内容
@@ -74,12 +82,5 @@ public class Message implements Serializable {
     /**
      * 创建时间
      */
-    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
-
-    /**
-     * 更新时间
-     */
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
 }
