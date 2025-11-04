@@ -8,6 +8,7 @@ import com.springleaf.easychat.model.dto.SendMessageDTO;
 import com.springleaf.easychat.model.entity.GroupMember;
 import com.springleaf.easychat.model.vo.MessageVO;
 import com.springleaf.easychat.service.MessageService;
+import com.springleaf.easychat.service.UnreadService;
 import com.springleaf.easychat.utils.ConversationIdUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -34,13 +35,16 @@ public class ChatWebSocketHandler implements WebSocketHandler {
     private final MessageService messageService;
     private final GroupMemberMapper groupMemberMapper;
     private final ObjectMapper objectMapper;
+    private final UnreadService unreadService;
 
     public ChatWebSocketHandler(MessageService messageService,
                                GroupMemberMapper groupMemberMapper,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               UnreadService unreadService) {
         this.messageService = messageService;
         this.groupMemberMapper = groupMemberMapper;
         this.objectMapper = objectMapper;
+        this.unreadService = unreadService;
     }
 
     /**
@@ -125,12 +129,30 @@ public class ChatWebSocketHandler implements WebSocketHandler {
                     messageVO.getSenderId()
                 );
 
+                // 检查接收者的活跃会话
+                String activeConversationId = unreadService.getActiveChat(receiverId);
+                boolean isActiveChat = messageVO.getConversationId().equals(activeConversationId);
+
                 WebSocketSession receiverSession = ONLINE_USERS.get(receiverId);
                 if (receiverSession != null && receiverSession.isOpen()) {
-                    receiverSession.sendMessage(textMessage);
-                    log.info("单聊消息已推送给用户 {}, 会话ID: {}", receiverId, messageVO.getConversationId());
+                    // 接收者在线
+                    if (isActiveChat) {
+                        // 活跃会话匹配：续期活跃状态，推送消息，不增加未读数
+                        unreadService.renewActiveChat(receiverId);
+                        receiverSession.sendMessage(textMessage);
+                        log.info("单聊消息已推送给在线用户（活跃会话），未增加未读数，用户ID: {}, 会话ID: {}",
+                                receiverId, messageVO.getConversationId());
+                    } else {
+                        // 活跃会话不匹配：推送消息，增加未读数
+                        unreadService.incrementUnread(receiverId, messageVO.getConversationId());
+                        receiverSession.sendMessage(textMessage);
+                        log.info("单聊消息已推送给在线用户（非活跃会话），已增加未读数，用户ID: {}, 会话ID: {}",
+                                receiverId, messageVO.getConversationId());
+                    }
                 } else {
-                    log.info("接收者 {} 不在线，消息将存储到数据库, 会话ID: {}", receiverId, messageVO.getConversationId());
+                    // 接收者离线：增加未读数
+                    unreadService.incrementUnread(receiverId, messageVO.getConversationId());
+                    log.info("接收者离线，已增加未读数，用户ID: {}, 会话ID: {}", receiverId, messageVO.getConversationId());
                 }
             }
             // 群聊：推送给所有在线群成员
@@ -144,20 +166,44 @@ public class ChatWebSocketHandler implements WebSocketHandler {
                 List<GroupMember> groupMembers = groupMemberMapper.selectList(wrapper);
 
                 int onlineCount = 0;
+                int unreadIncrementCount = 0;
                 for (GroupMember member : groupMembers) {
-                    // 推送给所有在线成员（包括发送者）
+                    // 跳过发送者自己（发送者不需要接收自己的消息）
+                    if (member.getUserId().equals(messageVO.getSenderId())) {
+                        continue;
+                    }
+
+                    // 检查该成员的活跃会话
+                    String activeChatId = unreadService.getActiveChat(member.getUserId());
+                    boolean isActiveChat = messageVO.getConversationId().equals(activeChatId);
+
+                    // 推送给所有在线成员
                     WebSocketSession memberSession = ONLINE_USERS.get(member.getUserId());
                     if (memberSession != null && memberSession.isOpen()) {
                         try {
-                            memberSession.sendMessage(textMessage);
-                            onlineCount++;
+                            if (isActiveChat) {
+                                // 活跃会话匹配：续期，推送，不增加未读数
+                                unreadService.renewActiveChat(member.getUserId());
+                                memberSession.sendMessage(textMessage);
+                                onlineCount++;
+                            } else {
+                                // 活跃会话不匹配：推送，增加未读数
+                                unreadService.incrementUnread(member.getUserId(), messageVO.getConversationId());
+                                memberSession.sendMessage(textMessage);
+                                onlineCount++;
+                                unreadIncrementCount++;
+                            }
                         } catch (IOException e) {
                             log.error("推送消息给群成员 {} 失败", member.getUserId(), e);
                         }
+                    } else {
+                        // 成员离线：增加未读数
+                        unreadService.incrementUnread(member.getUserId(), messageVO.getConversationId());
+                        unreadIncrementCount++;
                     }
                 }
-                log.info("群聊消息已推送，会话ID: {}, 群组ID: {}, 在线成员数: {}/{}",
-                         messageVO.getConversationId(), groupId, onlineCount, groupMembers.size());
+                log.info("群聊消息已推送，会话ID: {}, 群组ID: {}, 在线成员数: {}/{}, 增加未读数成员数: {}",
+                         messageVO.getConversationId(), groupId, onlineCount, groupMembers.size() - 1, unreadIncrementCount);
             }
 
         } catch (Exception e) {

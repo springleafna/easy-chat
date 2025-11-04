@@ -17,6 +17,7 @@ import com.springleaf.easychat.service.ConversationService;
 import com.springleaf.easychat.service.FriendService;
 import com.springleaf.easychat.service.GroupService;
 import com.springleaf.easychat.service.MessageService;
+import com.springleaf.easychat.service.UnreadService;
 import com.springleaf.easychat.service.UserService;
 import com.springleaf.easychat.utils.UserContextUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +47,9 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
 
     @Resource
     private MessageService messageService;
+
+    @Resource
+    private UnreadService unreadService;
 
     @Override
     public List<ConversationVO> getConversationList() {
@@ -113,7 +117,13 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
             messageMap = messages.stream().collect(Collectors.toMap(Message::getId, message -> message));
         }
 
-        // 7. 组装ConversationVO
+        // 7. 批量查询未读数
+        List<String> conversationIds = conversationList.stream()
+                .map(Conversation::getConversationId)
+                .collect(Collectors.toList());
+        Map<String, Integer> unreadCountMap = unreadService.batchGetUnreadCounts(userId, conversationIds);
+
+        // 8. 组装ConversationVO
         List<ConversationVO> conversationVOList = new ArrayList<>();
         for (Conversation conversation : conversationList) {
             ConversationVO conversationVO = new ConversationVO();
@@ -127,6 +137,9 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
             conversationVO.setMuted(conversation.getMuted());
             conversationVO.setCreatedAt(conversation.getCreatedAt());
             conversationVO.setUpdatedAt(conversation.getUpdatedAt());
+
+            // 设置未读数
+            conversationVO.setUnreadCount(unreadCountMap.getOrDefault(conversation.getConversationId(), 0));
 
             // 根据会话类型设置会话名称和头像
             if (ConversationTypeEnum.SINGLE.getCode().equals(conversation.getType())) {

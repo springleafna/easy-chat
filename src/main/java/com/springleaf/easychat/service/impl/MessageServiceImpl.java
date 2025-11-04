@@ -17,6 +17,7 @@ import com.springleaf.easychat.model.entity.Message;
 import com.springleaf.easychat.model.entity.User;
 import com.springleaf.easychat.model.vo.MessageVO;
 import com.springleaf.easychat.service.MessageService;
+import com.springleaf.easychat.service.UnreadService;
 import com.springleaf.easychat.service.UserService;
 import com.springleaf.easychat.utils.ConversationIdUtil;
 import com.springleaf.easychat.utils.UserContextUtil;
@@ -41,13 +42,16 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
     private final UserService userService;
     private final ConversationMapper conversationMapper;
     private final GroupMemberMapper groupMemberMapper;
+    private final UnreadService unreadService;
 
     public MessageServiceImpl(UserService userService,
                             ConversationMapper conversationMapper,
-                            GroupMemberMapper groupMemberMapper) {
+                            GroupMemberMapper groupMemberMapper,
+                            UnreadService unreadService) {
         this.userService = userService;
         this.conversationMapper = conversationMapper;
         this.groupMemberMapper = groupMemberMapper;
+        this.unreadService = unreadService;
     }
 
     @Override
@@ -242,7 +246,10 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             throw new BusinessException("无效的会话ID格式");
         }
 
-        // 3. 查询会话，验证会话是否存在且用户有权限访问
+        // 3. 立即清除未读数（在查询消息之前）
+        unreadService.clearUnread(currentUserId, queryDTO.getConversationId());
+
+        // 4. 查询会话，验证会话是否存在且用户有权限访问
         LambdaQueryWrapper<Conversation> conversationWrapper = new LambdaQueryWrapper<>();
         conversationWrapper.eq(Conversation::getUserId, currentUserId)
                           .eq(Conversation::getConversationId, queryDTO.getConversationId())
@@ -253,13 +260,13 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             throw new BusinessException("会话不存在或无权访问");
         }
 
-        // 4. 构建查询条件
+        // 5. 构建查询条件
         LambdaQueryWrapper<Message> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Message::getConversationId, queryDTO.getConversationId())
                     .ne(Message::getStatus, MessageStatusEnum.DELETED.getCode()) // 排除已删除的消息
                     .orderByDesc(Message::getCreatedAt); // 按时间倒序（最新的在前）
 
-        // 5. 如果提供了 lastMessageId，使用游标分页（推荐）
+        // 6. 如果提供了 lastMessageId，使用游标分页（推荐）
         if (queryDTO.getLastMessageId() != null) {
             Message lastMessage = this.getById(queryDTO.getLastMessageId());
             if (lastMessage != null) {
@@ -268,18 +275,18 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             }
         }
 
-        // 6. 执行分页查询
+        // 7. 执行分页查询
         Page<Message> messagePage = new Page<>(queryDTO.getPage(), queryDTO.getSize());
         messagePage = this.page(messagePage, queryWrapper);
 
-        // 7. 转换为 MessageVO 并填充发送者信息
+        // 8. 转换为 MessageVO 并填充发送者信息
         List<MessageVO> messageVOList = convertToMessageVOList(messagePage.getRecords(), conversation.getType());
 
-        // 8. 构建分页结果
+        // 9. 构建分页结果
         Page<MessageVO> resultPage = new Page<>(messagePage.getCurrent(), messagePage.getSize(), messagePage.getTotal());
         resultPage.setRecords(messageVOList);
 
-        log.info("查询历史消息成功，会话ID: {}, 用户ID: {}, 当前页: {}, 每页大小: {}, 总数: {}",
+        log.info("查询历史消息成功并清除未读数，会话ID: {}, 用户ID: {}, 当前页: {}, 每页大小: {}, 总数: {}",
                 queryDTO.getConversationId(), currentUserId, messagePage.getCurrent(),
                 messagePage.getSize(), messagePage.getTotal());
 

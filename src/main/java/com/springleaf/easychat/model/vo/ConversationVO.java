@@ -38,6 +38,11 @@ public class ConversationVO {
     private String avatarUrl;
 
     /**
+     * 未读消息数
+     */
+    private Integer unreadCount;
+
+    /**
      * 最后一条消息ID
      */
     private Long lastMessageId;
