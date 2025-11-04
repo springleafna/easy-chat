@@ -3,7 +3,6 @@ package com.springleaf.easychat.model.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
-import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
@@ -11,9 +10,7 @@ import java.time.LocalDateTime;
  */
 @Data
 @TableName("conversations")
-public class Conversation implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class Conversation {
 
     /**
      * 逻辑会话ID：单聊 s_{min}_{max}，群聊 g_{group_id}

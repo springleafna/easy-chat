@@ -5,7 +5,6 @@ import com.springleaf.easychat.model.dto.ActiveChatDTO;
 import com.springleaf.easychat.model.vo.ConversationVO;
 import com.springleaf.easychat.service.ConversationService;
 import com.springleaf.easychat.service.UnreadService;
-import com.springleaf.easychat.utils.UserContextUtil;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.extern.slf4j.Slf4j;
@@ -48,8 +47,7 @@ public class ConversationController {
      */
     @PostMapping("/active")
     public Result<Void> setActiveChat(@Valid @RequestBody ActiveChatDTO dto) {
-        Long userId = UserContextUtil.getCurrentUserId();
-        unreadService.setActiveChat(userId, dto.getConversationId());
+        unreadService.setActiveChat(dto);
         return Result.success();
     }
 

@@ -1,5 +1,7 @@
 package com.springleaf.easychat.service;
 
+import com.springleaf.easychat.model.dto.ActiveChatDTO;
+
 import java.util.List;
 import java.util.Map;
 
@@ -11,10 +13,9 @@ public interface UnreadService {
     /**
      * 设置用户的活跃会话
      *
-     * @param userId 用户ID
-     * @param conversationId 会话ID
+     * @param dto 活跃会话DTO
      */
-    void setActiveChat(Long userId, String conversationId);
+    void setActiveChat(ActiveChatDTO dto);
 
     /**
      * 获取用户的活跃会话ID

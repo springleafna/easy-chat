@@ -1,7 +1,9 @@
 package com.springleaf.easychat.service.impl;
 
 import com.springleaf.easychat.constants.RedisKeyConstants;
+import com.springleaf.easychat.model.dto.ActiveChatDTO;
 import com.springleaf.easychat.service.UnreadService;
+import com.springleaf.easychat.utils.UserContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -26,7 +28,9 @@ public class UnreadServiceImpl implements UnreadService {
     }
 
     @Override
-    public void setActiveChat(Long userId, String conversationId) {
+    public void setActiveChat(ActiveChatDTO dto) {
+        Long userId = UserContextUtil.getCurrentUserId();
+        String conversationId = dto.getConversationId();
         String key = RedisKeyConstants.getActiveChatKey(userId);
         stringRedisTemplate.opsForValue().set(
             key,

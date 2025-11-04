@@ -5,16 +5,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-import java.io.Serializable;
 import java.time.LocalDate;
 
 /**
  * 用户信息更新请求
  */
 @Data
-public class UserUpdateRequest implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class UserUpdateRequest {
 
     /**
      * 昵称（必填）
