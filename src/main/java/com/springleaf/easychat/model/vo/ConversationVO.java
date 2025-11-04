@@ -10,14 +10,12 @@ import java.time.LocalDateTime;
  * 会话列表响应
  */
 @Data
-public class ConversationVO implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class ConversationVO {
 
     /**
      * 会话ID
      */
-    private Long id;
+    private String conversationId;
 
     /**
      * 会话类型：1-单聊，2-群聊
@@ -40,11 +38,6 @@ public class ConversationVO implements Serializable {
     private String avatarUrl;
 
     /**
-     * 未读消息数
-     */
-    private Integer unreadCount;
-
-    /**
      * 最后一条消息ID
      */
     private Long lastMessageId;
@@ -64,6 +57,16 @@ public class ConversationVO implements Serializable {
      * 会话状态：0-已删除，1-正常
      */
     private Integer status;
+
+    /**
+     * 是否置顶
+     */
+    private Boolean pinned;
+
+    /**
+     * 是否免打扰
+     */
+    private Boolean muted;
 
     /**
      * 创建时间

@@ -3,6 +3,7 @@ package com.springleaf.easychat.controller;
 import com.springleaf.easychat.common.Result;
 import com.springleaf.easychat.model.vo.ConversationVO;
 import com.springleaf.easychat.service.ConversationService;
+import jakarta.validation.constraints.NotBlank;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,14 +33,26 @@ public class ConversationController {
     }
 
     /**
-     * 标记会话为已读
+     * 切换会话置顶状态
      *
      * @param conversationId 会话ID
      * @return 操作结果
      */
-    @PutMapping("/read/{conversationId}")
-    public Result<Void> markAsRead(@PathVariable Long conversationId) {
-        conversationService.markAsRead(conversationId);
+    @PutMapping("/pin/{conversationId}")
+    public Result<Void> togglePin(@PathVariable @NotBlank(message = "会话ID不能为空") String conversationId) {
+        conversationService.togglePin(conversationId);
+        return Result.success();
+    }
+
+    /**
+     * 切换会话免打扰状态
+     *
+     * @param conversationId 会话ID
+     * @return 操作结果
+     */
+    @PutMapping("/mute/{conversationId}")
+    public Result<Void> toggleMute(@PathVariable @NotBlank(message = "会话ID不能为空") String conversationId) {
+        conversationService.toggleMute(conversationId);
         return Result.success();
     }
 }

@@ -16,10 +16,9 @@ public class Conversation implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 会话ID
+     * 逻辑会话ID：单聊 s_{min}_{max}，群聊 g_{group_id}
      */
-    @TableId(type = IdType.AUTO)
-    private Long id;
+    private String conversationId;
 
     /**
      * 会话类型：1-单聊，2-群聊
@@ -27,19 +26,14 @@ public class Conversation implements Serializable {
     private Integer type;
 
     /**
-     * 目标ID（单聊为对方user_id，群聊为group_id）
-     */
-    private Long targetId;
-
-    /**
-     * 用户ID
+     * 当前用户ID
      */
     private Long userId;
 
     /**
-     * 未读消息数
+     * 目标ID（单聊为对方user_id，群聊为group_id）
      */
-    private Integer unreadCount;
+    private Long targetId;
 
     /**
      * 最后一条消息ID
@@ -55,6 +49,16 @@ public class Conversation implements Serializable {
      * 会话状态：0-已删除，1-正常
      */
     private Integer status;
+
+    /**
+     * 是否置顶
+     */
+    private Boolean pinned;
+
+    /**
+     * 是否免打扰
+     */
+    private Boolean muted;
 
     /**
      * 创建时间

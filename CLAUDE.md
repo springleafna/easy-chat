@@ -74,13 +74,13 @@ Mapper（数据访问层）
   - `FriendController`：好友管理
   - `GroupController`：群组管理
   - `MessageController`：消息历史查询（分页）
-  - `ConversationController`：会话列表、标记已读
+  - `ConversationController`：会话列表
 
 - **`service/`** 和 `service/impl/` - 业务逻辑层
   - Service 接口定义业务方法
   - impl 包含具体实现
   - **MessageService**：消息发送、历史查询
-  - **ConversationService**：会话列表查询、已读管理
+  - **ConversationService**：会话列表查询
 
 - **`mapper/`** - MyBatis-Plus 数据访问层
   - 继承 `BaseMapper<T>` 获得 CRUD 基础方法
@@ -129,7 +129,7 @@ Mapper（数据访问层）
 - 所有 API（除登录/注册）需要登录认证
 - Token 名称为 `Authorization`（Header 传递）
 - 不支持同账号并发登录（新登录会挤掉旧登录）
-- Token 永不过期（`timeout: -1`）
+- Token 一天过期（`timeout: 86400`）
 - 详见 `SaTokenConfig.java:16-25`
 
 **2. 统一响应格式**
@@ -162,12 +162,11 @@ Mapper（数据访问层）
 - **消息发送流程**：
   1. 客户端通过 WebSocket 发送消息
   2. 服务器保存消息到数据库（自动生成ID）
-  3. 更新会话表（last_message_id, last_message_time, unread_count）
+  3. 更新会话表（last_message_id, last_message_time）
   4. 推送消息给接收者（在线用户）
 - **会话自动创建**：首次发送消息时自动创建双方的会话记录
 - **未读消息处理**：
-  - 接收消息时：自动增加 unread_count
-  - 查看消息时：首次加载历史消息时自动标记已读（unread_count = 0）
+  - 暂未处理
 - **历史消息查询**：
   - 支持普通分页（基于页码）
   - 支持游标分页（基于 lastMessageId，推荐用于滚动加载）
@@ -177,17 +176,6 @@ Mapper（数据访问层）
 - **批量查询**：会话列表、历史消息等场景使用批量查询用户信息
 - **游标分页**：聊天历史使用游标分页，避免数据偏移问题
 - **自动填充**：时间戳字段自动填充，减少代码重复
-- **索引建议**：
-  ```sql
-  -- 消息表索引（提升历史查询性能）
-  -- 单聊查询索引
-  CREATE INDEX idx_messages_sender_receiver_time ON messages(sender_id, receiver_id, created_at DESC);
-  CREATE INDEX idx_messages_receiver_sender_time ON messages(receiver_id, sender_id, created_at DESC);
-  -- 群聊查询索引
-  CREATE INDEX idx_messages_group_time ON messages(group_id, created_at DESC);
-  -- 消息状态索引
-  CREATE INDEX idx_messages_status ON messages(status);
-  ```
 
 ## 数据库说明
 
@@ -200,18 +188,6 @@ Mapper（数据访问层）
 - **conversations**：会话表（单聊/群聊会话管理）  
 具体sql参考/docs/easy_chat.sql
 ### 表结构设计说明
-
-**消息表与会话表的关系**：
-- ✅ **messages 表是独立的消息存储单元**，不直接关联 conversation_id
-- ✅ **查询单聊消息**：通过 `(sender_id, receiver_id)` 组合查询双方的完整对话
-  ```sql
-  WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-  ```
-- ✅ **查询群聊消息**：通过 `group_id` 查询该群的所有消息
-  ```sql
-  WHERE group_id = ?
-  ```
-- ✅ **conversations 表只保存会话元数据**（未读数、最后消息预览等），不存储消息内容
 
 ### 时区配置
 - Jackson 时区设置为 GMT+8
@@ -235,7 +211,6 @@ Mapper（数据访问层）
 
 ### REST API 接口
 - **GET /conversation/list** - 获取会话列表（含未读数、最后消息预览）
-- **PUT /conversation/read/{id}** - 标记会话为已读（通常不需要手动调用）
 - **GET /message/history** - 分页查询历史消息（首次加载时自动标记已读）
   - 参数：`conversationId`, `page`, `size`（普通分页）
   - 参数：`conversationId`, `lastMessageId`, `size`（游标分页，推荐）
@@ -246,11 +221,9 @@ Mapper（数据访问层）
 2. 建立 WebSocket 连接 (携带 Token)
 3. 获取会话列表 (GET /conversation/list)
 4. 点击某个会话 → 加载历史消息 (GET /message/history)
-   → 后端自动标记该会话为已读
 5. 发送消息 (通过 WebSocket)
    → 消息保存到数据库 → 推送给接收者
 6. 接收消息 (通过 WebSocket)
-   → 会话列表未读数 +1
 ```
 
 ## 开发注意事项
@@ -270,9 +243,7 @@ Mapper（数据访问层）
    - 单聊：需要为双方各创建一个会话记录
    - 群聊：需要为所有群成员各创建一个会话记录
 3. **未读数管理**：
-   - 接收者的会话：`unread_count + 1`
-   - 发送者的会话：不增加未读数
-   - 查看消息时：自动清零（首次加载历史消息时）
+   - 暂未处理
 4. **性能优化**：
    - 使用批量查询（`listByIds`）获取用户信息，避免 N+1 问题
    - 推荐使用游标分页查询历史消息（`lastMessageId`），避免数据偏移
@@ -300,32 +271,5 @@ Mapper（数据访问层）
 - Mapper 层和 MyBatis 日志级别为 DEBUG（仅开发环境）
 - 可在 application-dev.yml 中调整日志级别
 
-## 常见问题与解决方案
-
-### 1. WebSocket 连接失败
-- **问题**：WebSocket 握手失败，返回 403 或连接被拒绝
-- **原因**：Token 无效或未提供
-- **解决**：确保连接 URL 包含有效的 token 参数：`ws://localhost:8091/ws/chat?token=YOUR_TOKEN`
-
-### 2. 消息未读数不更新
-- **问题**：查看消息后未读数仍然显示
-- **原因**：前端未刷新会话列表
-- **解决**：加载历史消息后，前端应更新本地会话列表的 `unreadCount` 为 0，或重新获取会话列表
-
-### 3. 会话表的 last_message_id 为 null
-- **问题**：发送消息后，会话表的 `last_message_id` 字段是 null
-- **原因**：更新会话时，消息还未保存到数据库（ID未生成）
-- **解决**：必须先保存消息（`this.save(message)`），再更新会话表
-
-### 4. 群聊消息只有发送者收到
-- **问题**：发送群聊消息后，只有自己能看到
-- **原因**：未查询群成员列表或推送逻辑有误
-- **解决**：检查 `ChatWebSocketHandler.pushMessage()` 中的群聊推送逻辑，确保查询了群成员并遍历推送
-
-### 5. 历史消息分页数据重复
-- **问题**：滚动加载时，相同的消息出现多次
-- **原因**：使用普通分页（page），新消息插入导致页码偏移
-- **解决**：使用游标分页（`lastMessageId`），参考 `MessageHistoryDTO`
-
 ### 参考文档
-- **数据库脚本**：见 `docs/easy_chat.sql/` 
+- **数据库脚本**：见 `docs/easy_chat.sql` 

@@ -18,6 +18,7 @@ import com.springleaf.easychat.model.entity.User;
 import com.springleaf.easychat.model.vo.MessageVO;
 import com.springleaf.easychat.service.MessageService;
 import com.springleaf.easychat.service.UserService;
+import com.springleaf.easychat.utils.ConversationIdUtil;
 import com.springleaf.easychat.utils.UserContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -62,27 +63,56 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             throw new BusinessException("发送者不存在");
         }
 
+        // 生成会话ID
+        String conversationId;
+        List<Conversation> conversationsToUpdate;
+
+        if (messageDTO.getConversationType().equals(ConversationTypeEnum.SINGLE.getCode())) {
+            // 单聊
+            if (messageDTO.getReceiverId() == null) {
+                throw new BusinessException("单聊时接收者ID不能为空");
+            }
+
+            // 验证接收者是否存在
+            User receiver = userService.getById(messageDTO.getReceiverId());
+            if (receiver == null) {
+                throw new BusinessException("接收者不存在");
+            }
+
+            conversationId = ConversationIdUtil.generateSingleChatId(senderId, messageDTO.getReceiverId());
+            conversationsToUpdate = handlePrivateMessage(conversationId, senderId, messageDTO.getReceiverId());
+        } else if (messageDTO.getConversationType().equals(ConversationTypeEnum.GROUP.getCode())) {
+            // 群聊
+            if (messageDTO.getGroupId() == null) {
+                throw new BusinessException("群聊时群组ID不能为空");
+            }
+
+            // 验证用户是否在群组中
+            LambdaQueryWrapper<GroupMember> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(GroupMember::getGroupId, messageDTO.getGroupId())
+                   .eq(GroupMember::getUserId, senderId);
+            GroupMember groupMember = groupMemberMapper.selectOne(wrapper);
+
+            if (groupMember == null) {
+                throw new BusinessException("您不在该群组中");
+            }
+
+            conversationId = ConversationIdUtil.generateGroupChatId(messageDTO.getGroupId());
+            conversationsToUpdate = handleGroupMessage(conversationId, messageDTO.getGroupId());
+        } else {
+            throw new BusinessException("无效的会话类型");
+        }
+
         // 创建消息实体
         Message message = new Message();
+        message.setConversationId(conversationId);
         message.setSenderId(senderId);
         message.setMessageType(messageDTO.getMessageType());
         message.setContent(messageDTO.getContent());
         message.setMediaUrl(messageDTO.getMediaUrl());
         message.setFileName(messageDTO.getFileName());
         message.setFileSize(messageDTO.getFileSize());
-        message.setStatus(MessageStatusEnum.NORMAL.getCode()); // 正常状态
-
-        // 处理单聊或群聊，设置消息的基本信息（receiverId/groupId 和 conversationId）
-        List<Conversation> conversationsToUpdate;
-        if (messageDTO.getConversationType().equals(ConversationTypeEnum.SINGLE.getCode())) {
-            // 单聊
-            conversationsToUpdate = handlePrivateMessage(message, senderId, messageDTO.getReceiverId());
-        } else if (messageDTO.getConversationType().equals(ConversationTypeEnum.GROUP.getCode())) {
-            // 群聊
-            conversationsToUpdate = handleGroupMessage(message, senderId, messageDTO.getGroupId());
-        } else {
-            throw new BusinessException("无效的会话类型");
-        }
+        message.setStatus(MessageStatusEnum.NORMAL.getCode());
 
         // 保存消息（此时会生成消息ID）
         this.save(message);
@@ -99,7 +129,7 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         messageVO.setSenderNickname(sender.getNickname());
         messageVO.setSenderAvatar(sender.getAvatarUrl());
 
-        log.info("消息发送成功，消息ID: {}", message.getId());
+        log.info("消息发送成功，消息ID: {}, 会话ID: {}", message.getId(), conversationId);
         return messageVO;
     }
 
@@ -107,22 +137,10 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
      * 处理单聊消息
      * @return 需要更新的会话列表
      */
-    private List<Conversation> handlePrivateMessage(Message message, Long senderId, Long receiverId) {
-        if (receiverId == null) {
-            throw new BusinessException("接收者ID不能为空");
-        }
-
-        // 验证接收者是否存在
-        User receiver = userService.getById(receiverId);
-        if (receiver == null) {
-            throw new BusinessException("接收者不存在");
-        }
-
-        message.setReceiverId(receiverId);
-
-        // 查找或创建会话
-        Conversation senderConversation = findOrCreateConversation(senderId, receiverId, ConversationTypeEnum.SINGLE.getCode());
-        Conversation receiverConversation = findOrCreateConversation(receiverId, senderId, ConversationTypeEnum.SINGLE.getCode());
+    private List<Conversation> handlePrivateMessage(String conversationId, Long senderId, Long receiverId) {
+        // 查找或创建双方的会话
+        Conversation senderConversation = findOrCreateConversation(conversationId, senderId, receiverId, ConversationTypeEnum.SINGLE.getCode());
+        Conversation receiverConversation = findOrCreateConversation(conversationId, receiverId, senderId, ConversationTypeEnum.SINGLE.getCode());
 
         // 返回需要更新的会话列表（在消息保存后再更新）
         List<Conversation> conversations = new ArrayList<>();
@@ -135,23 +153,7 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
      * 处理群聊消息
      * @return 需要更新的会话列表
      */
-    private List<Conversation> handleGroupMessage(Message message, Long senderId, Long groupId) {
-        if (groupId == null) {
-            throw new BusinessException("群组ID不能为空");
-        }
-
-        // 验证用户是否在群组中
-        LambdaQueryWrapper<GroupMember> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(GroupMember::getGroupId, groupId)
-               .eq(GroupMember::getUserId, senderId);
-        GroupMember groupMember = groupMemberMapper.selectOne(wrapper);
-
-        if (groupMember == null) {
-            throw new BusinessException("您不在该群组中");
-        }
-
-        message.setGroupId(groupId);
-
+    private List<Conversation> handleGroupMessage(String conversationId, Long groupId) {
         // 查询所有群成员，为每个成员创建或更新会话
         LambdaQueryWrapper<GroupMember> memberWrapper = new LambdaQueryWrapper<>();
         memberWrapper.eq(GroupMember::getGroupId, groupId);
@@ -159,7 +161,7 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
 
         List<Conversation> conversations = new ArrayList<>();
         for (GroupMember member : groupMembers) {
-            Conversation memberConversation = findOrCreateConversation(member.getUserId(), groupId, ConversationTypeEnum.GROUP.getCode());
+            Conversation memberConversation = findOrCreateConversation(conversationId, member.getUserId(), groupId, ConversationTypeEnum.GROUP.getCode());
             conversations.add(memberConversation);
         }
 
@@ -169,22 +171,23 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
     /**
      * 查找或创建会话
      */
-    private Conversation findOrCreateConversation(Long userId, Long targetId, Integer type) {
+    private Conversation findOrCreateConversation(String conversationId, Long userId, Long targetId, Integer type) {
         LambdaQueryWrapper<Conversation> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Conversation::getUserId, userId)
-               .eq(Conversation::getTargetId, targetId)
-               .eq(Conversation::getType, type)
+               .eq(Conversation::getConversationId, conversationId)
                .eq(Conversation::getStatus, 1);
 
         Conversation conversation = conversationMapper.selectOne(wrapper);
 
         if (conversation == null) {
             conversation = new Conversation();
+            conversation.setConversationId(conversationId);
             conversation.setUserId(userId);
             conversation.setTargetId(targetId);
             conversation.setType(type);
-            conversation.setUnreadCount(0);
             conversation.setStatus(1);
+            conversation.setPinned(false);
+            conversation.setMuted(false);
             conversationMapper.insert(conversation);
         }
 
@@ -197,11 +200,12 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
     private void updateConversation(Conversation conversation, Message message) {
         conversation.setLastMessageId(message.getId());
         conversation.setLastMessageTime(LocalDateTime.now());
-        // 如果不是发送者的会话，增加未读数
-        if (!conversation.getUserId().equals(message.getSenderId())) {
-            conversation.setUnreadCount(conversation.getUnreadCount() + 1);
-        }
-        conversationMapper.updateById(conversation);
+
+        // 使用联合主键条件更新，因为 conversations 表使用 (user_id, conversation_id) 作为联合主键
+        LambdaQueryWrapper<Conversation> updateWrapper = new LambdaQueryWrapper<>();
+        updateWrapper.eq(Conversation::getUserId, conversation.getUserId())
+                    .eq(Conversation::getConversationId, conversation.getConversationId());
+        conversationMapper.update(conversation, updateWrapper);
     }
 
     /**
@@ -233,49 +237,29 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         // 1. 获取当前登录用户ID
         Long currentUserId = UserContextUtil.getCurrentUserId();
 
-        // 2. 查询会话，验证会话是否存在且用户有权限访问
-        Conversation conversation = conversationMapper.selectById(queryDTO.getConversationId());
+        // 2. 验证会话ID格式
+        if (!ConversationIdUtil.isValid(queryDTO.getConversationId())) {
+            throw new BusinessException("无效的会话ID格式");
+        }
+
+        // 3. 查询会话，验证会话是否存在且用户有权限访问
+        LambdaQueryWrapper<Conversation> conversationWrapper = new LambdaQueryWrapper<>();
+        conversationWrapper.eq(Conversation::getUserId, currentUserId)
+                          .eq(Conversation::getConversationId, queryDTO.getConversationId())
+                          .eq(Conversation::getStatus, 1);
+        Conversation conversation = conversationMapper.selectOne(conversationWrapper);
+
         if (conversation == null) {
-            throw new BusinessException("会话不存在");
+            throw new BusinessException("会话不存在或无权访问");
         }
 
-        // 3. 验证用户是否有权限访问该会话
-        if (!conversation.getUserId().equals(currentUserId)) {
-            throw new BusinessException("无权访问此会话");
-        }
-
-        // 4. 首次加载消息时（page=1 或没有lastMessageId），自动标记会话为已读
-        if ((queryDTO.getLastMessageId() == null && queryDTO.getPage() == 1)
-            && conversation.getUnreadCount() != null
-            && conversation.getUnreadCount() > 0) {
-            conversation.setUnreadCount(0);
-            conversationMapper.updateById(conversation);
-            log.info("自动标记会话为已读，会话ID: {}, 用户ID: {}", queryDTO.getConversationId(), currentUserId);
-        }
-
-        // 5. 根据会话类型构建查询条件
+        // 4. 构建查询条件
         LambdaQueryWrapper<Message> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.ne(Message::getStatus, MessageStatusEnum.DELETED.getCode()) // 排除已删除的消息
+        queryWrapper.eq(Message::getConversationId, queryDTO.getConversationId())
+                    .ne(Message::getStatus, MessageStatusEnum.DELETED.getCode()) // 排除已删除的消息
                     .orderByDesc(Message::getCreatedAt); // 按时间倒序（最新的在前）
 
-        // 单聊：查询双方的消息
-        if (ConversationTypeEnum.SINGLE.getCode().equals(conversation.getType())) {
-            Long targetId = conversation.getTargetId();
-            // 查询条件：(sender=我 AND receiver=对方) OR (sender=对方 AND receiver=我)
-            queryWrapper.and(wrapper -> wrapper
-                .and(w -> w.eq(Message::getSenderId, currentUserId).eq(Message::getReceiverId, targetId))
-                .or(w -> w.eq(Message::getSenderId, targetId).eq(Message::getReceiverId, currentUserId))
-            );
-        }
-        // 群聊：查询该群的所有消息
-        else if (ConversationTypeEnum.GROUP.getCode().equals(conversation.getType())) {
-            Long groupId = conversation.getTargetId();
-            queryWrapper.eq(Message::getGroupId, groupId);
-        } else {
-            throw new BusinessException("无效的会话类型");
-        }
-
-        // 6. 如果提供了 lastMessageId，使用游标分页（推荐）
+        // 5. 如果提供了 lastMessageId，使用游标分页（推荐）
         if (queryDTO.getLastMessageId() != null) {
             Message lastMessage = this.getById(queryDTO.getLastMessageId());
             if (lastMessage != null) {
@@ -284,14 +268,14 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             }
         }
 
-        // 7. 执行分页查询
+        // 6. 执行分页查询
         Page<Message> messagePage = new Page<>(queryDTO.getPage(), queryDTO.getSize());
         messagePage = this.page(messagePage, queryWrapper);
 
-        // 8. 转换为 MessageVO 并填充发送者信息
-        List<MessageVO> messageVOList = convertToMessageVOList(messagePage.getRecords());
+        // 7. 转换为 MessageVO 并填充发送者信息
+        List<MessageVO> messageVOList = convertToMessageVOList(messagePage.getRecords(), conversation.getType());
 
-        // 9. 构建分页结果
+        // 8. 构建分页结果
         Page<MessageVO> resultPage = new Page<>(messagePage.getCurrent(), messagePage.getSize(), messagePage.getTotal());
         resultPage.setRecords(messageVOList);
 
@@ -324,7 +308,7 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             throw new BusinessException("消息不存在");
         }
         if (!message.getSenderId().equals(currentUserId)) {
-            throw new BusinessException("无权删除此消息");
+            throw new BusinessException("无权撤回此消息");
         }
         message.setStatus(MessageStatusEnum.WITHDRAWN.getCode());
         this.updateById(message);
@@ -333,7 +317,7 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
     /**
      * 将 Message 列表转换为 MessageVO 列表，并填充发送者信息
      */
-    private List<MessageVO> convertToMessageVOList(List<Message> messages) {
+    private List<MessageVO> convertToMessageVOList(List<Message> messages, Integer conversationType) {
         if (messages == null || messages.isEmpty()) {
             return new ArrayList<>();
         }
@@ -355,11 +339,7 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             BeanUtils.copyProperties(message, messageVO);
 
             // 设置会话类型
-            if (message.getReceiverId() != null) {
-                messageVO.setConversationType(ConversationTypeEnum.SINGLE.getCode());
-            } else if (message.getGroupId() != null) {
-                messageVO.setConversationType(ConversationTypeEnum.GROUP.getCode());
-            }
+            messageVO.setConversationType(conversationType);
 
             // 填充发送者信息
             User sender = userMap.get(message.getSenderId());

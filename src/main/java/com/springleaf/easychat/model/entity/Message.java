@@ -22,19 +22,14 @@ public class Message implements Serializable {
     private Long id;
 
     /**
+     * 会话ID
+     */
+    private String conversationId;
+
+    /**
      * 发送者ID
      */
     private Long senderId;
-
-    /**
-     * 接收者ID（单聊时使用）
-     */
-    private Long receiverId;
-
-    /**
-     * 群组ID（群聊时使用）
-     */
-    private Long groupId;
 
     /**
      * 消息类型：1-文本，2-图片，3-语音，4-视频，5-文件，6-位置，7-系统消息

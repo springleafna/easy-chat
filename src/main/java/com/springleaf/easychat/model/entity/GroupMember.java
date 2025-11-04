@@ -11,9 +11,7 @@ import java.time.LocalDateTime;
  */
 @Data
 @TableName("group_members")
-public class GroupMember implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class GroupMember {
 
     /**
      * 主键ID

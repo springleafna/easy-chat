@@ -11,9 +11,7 @@ import java.time.LocalDateTime;
  * 好友信息响应
  */
 @Data
-public class FriendVO implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class FriendVO {
 
     /**
      * 好友关系ID

@@ -2,11 +2,13 @@ package com.springleaf.easychat.handler;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.springleaf.easychat.enums.ConversationTypeEnum;
 import com.springleaf.easychat.mapper.GroupMemberMapper;
 import com.springleaf.easychat.model.dto.SendMessageDTO;
 import com.springleaf.easychat.model.entity.GroupMember;
 import com.springleaf.easychat.model.vo.MessageVO;
 import com.springleaf.easychat.service.MessageService;
+import com.springleaf.easychat.utils.ConversationIdUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
@@ -116,20 +118,29 @@ public class ChatWebSocketHandler implements WebSocketHandler {
             TextMessage textMessage = new TextMessage(messageJson);
 
             // 单聊：推送给接收者
-            if (messageVO.getConversationType() == 1 && messageVO.getReceiverId() != null) {
-                WebSocketSession receiverSession = ONLINE_USERS.get(messageVO.getReceiverId());
+            if (ConversationTypeEnum.SINGLE.getCode().equals(messageVO.getConversationType())) {
+                // 从会话ID中提取对方用户ID
+                Long receiverId = ConversationIdUtil.extractTargetId(
+                    messageVO.getConversationId(),
+                    messageVO.getSenderId()
+                );
+
+                WebSocketSession receiverSession = ONLINE_USERS.get(receiverId);
                 if (receiverSession != null && receiverSession.isOpen()) {
                     receiverSession.sendMessage(textMessage);
-                    log.info("单聊消息已推送给用户 {}", messageVO.getReceiverId());
+                    log.info("单聊消息已推送给用户 {}, 会话ID: {}", receiverId, messageVO.getConversationId());
                 } else {
-                    log.info("接收者 {} 不在线，消息将存储到数据库", messageVO.getReceiverId());
+                    log.info("接收者 {} 不在线，消息将存储到数据库, 会话ID: {}", receiverId, messageVO.getConversationId());
                 }
             }
             // 群聊：推送给所有在线群成员
-            else if (messageVO.getConversationType() == 2 && messageVO.getGroupId() != null) {
+            else if (ConversationTypeEnum.GROUP.getCode().equals(messageVO.getConversationType())) {
+                // 从会话ID中提取群组ID
+                Long groupId = ConversationIdUtil.extractGroupIdFromGroupChat(messageVO.getConversationId());
+
                 // 查询群成员列表
                 LambdaQueryWrapper<GroupMember> wrapper = new LambdaQueryWrapper<>();
-                wrapper.eq(GroupMember::getGroupId, messageVO.getGroupId());
+                wrapper.eq(GroupMember::getGroupId, groupId);
                 List<GroupMember> groupMembers = groupMemberMapper.selectList(wrapper);
 
                 int onlineCount = 0;
@@ -145,8 +156,8 @@ public class ChatWebSocketHandler implements WebSocketHandler {
                         }
                     }
                 }
-                log.info("群聊消息已推送，群组ID: {}，在线成员数: {}/{}",
-                         messageVO.getGroupId(), onlineCount, groupMembers.size());
+                log.info("群聊消息已推送，会话ID: {}, 群组ID: {}, 在线成员数: {}/{}",
+                         messageVO.getConversationId(), groupId, onlineCount, groupMembers.size());
             }
 
         } catch (Exception e) {

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.easychat.enums.ConversationStatusEnum;
 import com.springleaf.easychat.enums.ConversationTypeEnum;
 import com.springleaf.easychat.enums.MessageTypeEnum;
+import com.springleaf.easychat.exception.BusinessException;
 import com.springleaf.easychat.mapper.ConversationMapper;
 import com.springleaf.easychat.model.entity.Conversation;
 import com.springleaf.easychat.model.entity.Friend;
@@ -55,6 +56,7 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
         LambdaQueryWrapper<Conversation> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Conversation::getUserId, userId)
                 .eq(Conversation::getStatus, ConversationStatusEnum.NORMAL.getCode())
+                .orderByDesc(Conversation::getPinned) // 置顶的排在前面
                 .orderByDesc(Conversation::getLastMessageTime); // 按最后消息时间倒序
         List<Conversation> conversationList = this.list(queryWrapper);
 
@@ -115,13 +117,14 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
         List<ConversationVO> conversationVOList = new ArrayList<>();
         for (Conversation conversation : conversationList) {
             ConversationVO conversationVO = new ConversationVO();
-            conversationVO.setId(conversation.getId());
+            conversationVO.setConversationId(conversation.getConversationId());
             conversationVO.setType(conversation.getType());
             conversationVO.setTargetId(conversation.getTargetId());
-            conversationVO.setUnreadCount(conversation.getUnreadCount());
             conversationVO.setLastMessageId(conversation.getLastMessageId());
             conversationVO.setLastMessageTime(conversation.getLastMessageTime());
             conversationVO.setStatus(conversation.getStatus());
+            conversationVO.setPinned(conversation.getPinned());
+            conversationVO.setMuted(conversation.getMuted());
             conversationVO.setCreatedAt(conversation.getCreatedAt());
             conversationVO.setUpdatedAt(conversation.getUpdatedAt());
 
@@ -171,30 +174,55 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
     }
 
     @Override
-    public void markAsRead(Long conversationId) {
-        // 1. 获取当前登录用户ID
+    public void togglePin(String conversationId) {
         Long userId = UserContextUtil.getCurrentUserId();
 
-        // 2. 查询会话，验证会话是否存在且属于当前用户
-        Conversation conversation = this.getById(conversationId);
+        LambdaQueryWrapper<Conversation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Conversation::getUserId, userId)
+               .eq(Conversation::getConversationId, conversationId)
+               .eq(Conversation::getStatus, ConversationStatusEnum.NORMAL.getCode());
+        Conversation conversation = this.getOne(wrapper);
+
         if (conversation == null) {
-            throw new RuntimeException("会话不存在");
-        }
-        if (!conversation.getUserId().equals(userId)) {
-            throw new RuntimeException("无权操作此会话");
+            throw new BusinessException("会话不存在");
         }
 
-        // 3. 如果未读数已经是0，不需要更新
-        if (conversation.getUnreadCount() == null || conversation.getUnreadCount() == 0) {
-            log.info("会话已读，无需更新，会话ID: {}", conversationId);
-            return;
+        // 切换置顶状态
+        conversation.setPinned(!conversation.getPinned());
+
+        // 使用 update 方法而不是 updateById，因为没有单独的 id 主键
+        LambdaQueryWrapper<Conversation> updateWrapper = new LambdaQueryWrapper<>();
+        updateWrapper.eq(Conversation::getUserId, userId)
+                    .eq(Conversation::getConversationId, conversationId);
+        this.update(conversation, updateWrapper);
+
+        log.info("切换会话置顶状态成功，用户ID: {}, 会话ID: {}, 置顶: {}", userId, conversationId, conversation.getPinned());
+    }
+
+    @Override
+    public void toggleMute(String conversationId) {
+        Long userId = UserContextUtil.getCurrentUserId();
+
+        LambdaQueryWrapper<Conversation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Conversation::getUserId, userId)
+               .eq(Conversation::getConversationId, conversationId)
+               .eq(Conversation::getStatus, ConversationStatusEnum.NORMAL.getCode());
+        Conversation conversation = this.getOne(wrapper);
+
+        if (conversation == null) {
+            throw new BusinessException("会话不存在");
         }
 
-        // 4. 更新未读数为0
-        conversation.setUnreadCount(0);
-        this.updateById(conversation);
+        // 切换免打扰状态
+        conversation.setMuted(!conversation.getMuted());
 
-        log.info("标记会话为已读成功，用户ID: {}, 会话ID: {}", userId, conversationId);
+        // 使用 update 方法而不是 updateById，因为没有单独的 id 主键
+        LambdaQueryWrapper<Conversation> updateWrapper = new LambdaQueryWrapper<>();
+        updateWrapper.eq(Conversation::getUserId, userId)
+                    .eq(Conversation::getConversationId, conversationId);
+        this.update(conversation, updateWrapper);
+
+        log.info("切换会话免打扰状态成功，用户ID: {}, 会话ID: {}, 免打扰: {}", userId, conversationId, conversation.getMuted());
     }
 
     /**
@@ -227,7 +255,7 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
                 return "[语音]";
 
             case VIDEO:
-                return "[视频]";
+                return "[��频]";
 
             case FILE:
                 // 文件消息：显示文件名

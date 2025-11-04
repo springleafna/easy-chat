@@ -2,7 +2,7 @@ package com.springleaf.easychat.model.dto;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
@@ -14,8 +14,8 @@ public class MessageHistoryDTO {
     /**
      * 会话ID
      */
-    @NotNull(message = "会话ID不能为空")
-    private Long conversationId;
+    @NotBlank(message = "会话ID不能为空")
+    private String conversationId;
 
     /**
      * 页码（从1开始）

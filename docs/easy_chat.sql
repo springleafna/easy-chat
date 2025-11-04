@@ -64,27 +64,29 @@ CREATE TABLE group_members (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='群组成员表';
 
 CREATE TABLE conversations (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '会话ID',
+    conversation_id VARCHAR(64) NOT NULL COMMENT '逻辑会话ID：单聊 s_{min}_{max}，群聊 g_{group_id}',
     type TINYINT NOT NULL COMMENT '会话类型：1-单聊，2-群聊',
+    user_id BIGINT NOT NULL COMMENT '当前用户ID',
     target_id BIGINT NOT NULL COMMENT '目标ID（单聊为对方user_id，群聊为group_id）',
-    user_id BIGINT NOT NULL COMMENT '用户ID',
-    unread_count INT DEFAULT 0 COMMENT '未读消息数',
-    last_message_id BIGINT DEFAULT 0 COMMENT '最后一条消息ID',
+    last_message_id BIGINT DEFAULT NULL COMMENT '最后一条消息ID',
     last_message_time TIMESTAMP NULL COMMENT '最后消息时间',
     status TINYINT DEFAULT 1 COMMENT '会话状态：0-已删除，1-正常',
+    pinned BOOLEAN DEFAULT FALSE COMMENT '是否置顶',
+    muted BOOLEAN DEFAULT FALSE COMMENT '是否免打扰',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    UNIQUE KEY uk_user_target_type (user_id, target_id, type),
-    INDEX idx_user_id (user_id),
-    INDEX idx_target_id (target_id)
+    -- 联合主键：确保每个用户对每个会话只有一条记录
+    PRIMARY KEY (user_id, conversation_id),
+
+    -- 用于按时间倒序拉取会话列表
+    INDEX idx_user_status_time (user_id, status, last_message_time DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表';
 
 CREATE TABLE messages (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息ID',
+    conversation_id VARCHAR(64) NOT NULL COMMENT '会话ID',
     sender_id BIGINT NOT NULL COMMENT '发送者ID',
-    receiver_id BIGINT COMMENT '接收者ID（单聊时使用）',
-    group_id BIGINT COMMENT '群组ID（群聊时使用）',
     message_type TINYINT NOT NULL COMMENT '消息类型：1-文本，2-图片，3-语音，4-视频，5-文件，6-位置，7-系统消息',
     content TEXT COMMENT '消息内容',
     media_url VARCHAR(500) COMMENT '媒体文件URL（图片/语音/视频等）',
@@ -94,9 +96,9 @@ CREATE TABLE messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    INDEX idx_sender_created (sender_id, created_at DESC),
-    INDEX idx_receiver_created (receiver_id, created_at DESC),
-    INDEX idx_group_created (group_id, created_at DESC),
-    INDEX idx_sender_receiver_created (sender_id, receiver_id, created_at DESC),
-    INDEX idx_status_created (status, created_at DESC)
+    -- 关键索引：按会话分页查询消息（最新在前）
+    INDEX idx_conv_created (conversation_id, created_at DESC),
+
+    -- 辅助索引：查某人发送的所有消息（用于个人中心等）
+    INDEX idx_sender_created (sender_id, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='消息表';

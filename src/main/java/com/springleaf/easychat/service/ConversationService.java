@@ -19,9 +19,16 @@ public interface ConversationService extends IService<Conversation> {
     List<ConversationVO> getConversationList();
 
     /**
-     * 标记会话为已读（清除未读消息数）
+     * 切换会话置顶状态
      *
      * @param conversationId 会话ID
      */
-    void markAsRead(Long conversationId);
+    void togglePin(String conversationId);
+
+    /**
+     * 切换会话免打扰状态
+     *
+     * @param conversationId 会话ID
+     */
+    void toggleMute(String conversationId);
 }
