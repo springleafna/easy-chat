@@ -198,7 +198,6 @@ Mapper（数据访问层）
   - **查看消息时**：调用 `GET /message/history` 时自动清除该会话的未读数（Redis delete）
   - **会话列表**：批量查询所有会话的未读数（Redis MGET）
 - **历史消息查询**：
-  - 支持普通分页（基于页码）
   - 支持游标分页（基于 lastMessageId，推荐用于滚动加载）
   - 批量查询发送者信息，避免 N+1 问题
   - 查询时自动清除未读数（Redis delete）
@@ -303,7 +302,6 @@ Mapper（数据访问层）
 - **PUT /conversation/pin/{conversationId}** - 切换会话置顶状态
 - **PUT /conversation/mute/{conversationId}** - 切换会话免打扰状态
 - **GET /message/history** - 分页查询历史消息（自动清除未读数）
-  - 参数：`conversationId`, `page`, `size`（普通分页）
   - 参数：`conversationId`, `lastMessageId`, `size`（游标分页，推荐）
 - **DELETE /message/{messageId}** - 删除消息（仅发送者可删除）
 - **PUT /message/recall/{messageId}** - 撤回消息（仅发送者可撤回）
@@ -439,18 +437,7 @@ Mapper（数据访问层）
   - 遍历所有在线成员推送（发送者自己除外）
   - 正确处理活跃会话和未读数逻辑
 
-### 6. 历史消息分页数据重复
-- **问题**：滚动加载时，相同的消息出现多次
-- **原因**：使用普通分页（page），新消息插入导致页码偏移
-- **解决**：使用游标分页（`lastMessageId`），参考 `MessageHistoryDTO`
-  ```java
-  // 推荐：游标分页
-  if (queryDTO.getLastMessageId() != null) {
-      queryWrapper.lt(Message::getId, queryDTO.getLastMessageId());
-  }
-  ```
-
-### 7. Redis 未读数不一致
+### 6. Redis 未读数不一致
 - **问题**：Redis 中的未读数与实际不符
 - **原因**：Redis 数据过期或被误删除
 - **解决**：

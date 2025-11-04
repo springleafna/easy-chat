@@ -1,6 +1,5 @@
 package com.springleaf.easychat.controller;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.springleaf.easychat.common.Result;
 import com.springleaf.easychat.model.dto.MessageHistoryDTO;
 import com.springleaf.easychat.model.vo.MessageVO;
@@ -10,6 +9,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 消息控制器
@@ -29,8 +30,8 @@ public class MessageController {
      * @return 分页消息列表
      */
     @GetMapping("/history")
-    public Result<Page<MessageVO>> getMessageHistory(@Valid MessageHistoryDTO queryDTO) {
-        Page<MessageVO> messagePage = messageService.getMessageHistory(queryDTO);
+    public Result<List<MessageVO>> getMessageHistory(@Valid MessageHistoryDTO queryDTO) {
+        List<MessageVO> messagePage = messageService.getMessageHistory(queryDTO);
         return Result.success(messagePage);
     }
 

@@ -1,7 +1,6 @@
 package com.springleaf.easychat.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.easychat.enums.ConversationTypeEnum;
 import com.springleaf.easychat.enums.MessageStatusEnum;
@@ -237,7 +236,7 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
     }
 
     @Override
-    public Page<MessageVO> getMessageHistory(MessageHistoryDTO queryDTO) {
+    public List<MessageVO> getMessageHistory(MessageHistoryDTO queryDTO) {
         // 1. 获取当前登录用户ID
         Long currentUserId = UserContextUtil.getCurrentUserId();
 
@@ -260,37 +259,31 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
             throw new BusinessException("会话不存在或无权访问");
         }
 
-        // 5. 构建查询条件
+        // 5. 构建查询条件（游标分页）
         LambdaQueryWrapper<Message> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Message::getConversationId, queryDTO.getConversationId())
                     .ne(Message::getStatus, MessageStatusEnum.DELETED.getCode()) // 排除已删除的消息
-                    .orderByDesc(Message::getCreatedAt); // 按时间倒序（最新的在前）
+                    .orderByDesc(Message::getId); // 按ID倒序（最新的在前）
 
-        // 6. 如果提供了 lastMessageId，使用游标分页（推荐）
+        // 6. 如果提供了 lastMessageId，查询比此ID更小的消息（更早的消息）
         if (queryDTO.getLastMessageId() != null) {
-            Message lastMessage = this.getById(queryDTO.getLastMessageId());
-            if (lastMessage != null) {
-                // 查询比这条消息更早的消息（ID 更小或时间更早）
-                queryWrapper.lt(Message::getId, queryDTO.getLastMessageId());
-            }
+            queryWrapper.lt(Message::getId, queryDTO.getLastMessageId());
         }
 
-        // 7. 执行分页查询
-        Page<Message> messagePage = new Page<>(queryDTO.getPage(), queryDTO.getSize());
-        messagePage = this.page(messagePage, queryWrapper);
+        // 7. 执行查询（使用 limit 而不是分页）
+        queryWrapper.last("LIMIT " + queryDTO.getSize());
+        List<Message> messageList = this.list(queryWrapper);
 
         // 8. 转换为 MessageVO 并填充发送者信息
-        List<MessageVO> messageVOList = convertToMessageVOList(messagePage.getRecords(), conversation.getType());
+        List<MessageVO> messageVOList = convertToMessageVOList(messageList, conversation.getType());
 
-        // 9. 构建分页结果
-        Page<MessageVO> resultPage = new Page<>(messagePage.getCurrent(), messagePage.getSize(), messagePage.getTotal());
-        resultPage.setRecords(messageVOList);
+        // 9. 构建分页结果（为了保持返回格式一致，使用 Page 对象）
 
-        log.info("查询历史消息成功并清除未读数，会话ID: {}, 用户ID: {}, 当前页: {}, 每页大小: {}, 总数: {}",
-                queryDTO.getConversationId(), currentUserId, messagePage.getCurrent(),
-                messagePage.getSize(), messagePage.getTotal());
+        log.info("查询历史消息成功并清除未读数，会话ID: {}, 用户ID: {}, lastMessageId: {}, 每页大小: {}, 返回数量: {}",
+                queryDTO.getConversationId(), currentUserId, queryDTO.getLastMessageId(),
+                queryDTO.getSize(), messageVOList.size());
 
-        return resultPage;
+        return messageVOList;
     }
 
     @Override

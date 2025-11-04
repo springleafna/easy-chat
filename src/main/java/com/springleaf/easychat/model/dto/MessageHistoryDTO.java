@@ -18,12 +18,6 @@ public class MessageHistoryDTO {
     private String conversationId;
 
     /**
-     * 页码（从1开始）
-     */
-    @Min(value = 1, message = "页码必须大于0")
-    private Integer page = 1;
-
-    /**
      * 每页大小（默认20条）
      */
     @Min(value = 1, message = "每页大小必须大于0")
@@ -31,8 +25,9 @@ public class MessageHistoryDTO {
     private Integer size = 20;
 
     /**
-     * 最后一条消息ID（用于游标分页，优先级高于page）
+     * 最后一条消息ID（用于游标分页）
      * 如果提供此参数，则查询比此ID更早的消息
+     * 如果为空，则查询最新的消息
      */
     private Long lastMessageId;
 }
