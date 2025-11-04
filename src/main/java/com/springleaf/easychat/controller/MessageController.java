@@ -7,6 +7,7 @@ import com.springleaf.easychat.model.vo.MessageVO;
 import com.springleaf.easychat.service.MessageService;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,5 +32,23 @@ public class MessageController {
     public Result<Page<MessageVO>> getMessageHistory(@Valid MessageHistoryDTO queryDTO) {
         Page<MessageVO> messagePage = messageService.getMessageHistory(queryDTO);
         return Result.success(messagePage);
+    }
+
+    /**
+     * 删除消息
+     */
+    @DeleteMapping("/delete")
+    public Result<Void> deleteMessage(@RequestParam @NotNull(message = "消息ID不能为空") Long messageId) {
+        messageService.deleteMessage(messageId);
+        return Result.success();
+    }
+
+    /**
+     * 撤回消息
+     */
+    @PostMapping("/recall")
+    public Result<Void> recallMessage(@RequestParam @NotNull(message = "消息ID不能为空") Long messageId) {
+        messageService.recallMessage(messageId);
+        return Result.success();
     }
 }

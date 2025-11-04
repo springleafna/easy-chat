@@ -17,7 +17,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
                     @Override
                     public boolean preHandle(HttpServletRequest request,
                                              HttpServletResponse response,
-                                             Object handler) throws Exception {
+                                             Object handler) {
                         // 放行 OPTIONS 请求
                         if ("OPTIONS".equals(request.getMethod())) {
                             return true;

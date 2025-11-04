@@ -302,6 +302,34 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         return resultPage;
     }
 
+    @Override
+    public void deleteMessage(Long messageId) {
+        Long currentUserId = UserContextUtil.getCurrentUserId();
+        Message message = this.getById(messageId);
+        if (message == null) {
+            throw new BusinessException("消息不存在");
+        }
+        if (!message.getSenderId().equals(currentUserId)) {
+            throw new BusinessException("无权删除此消息");
+        }
+        message.setStatus(MessageStatusEnum.DELETED.getCode());
+        this.updateById(message);
+    }
+
+    @Override
+    public void recallMessage(Long messageId) {
+        Long currentUserId = UserContextUtil.getCurrentUserId();
+        Message message = this.getById(messageId);
+        if (message == null) {
+            throw new BusinessException("消息不存在");
+        }
+        if (!message.getSenderId().equals(currentUserId)) {
+            throw new BusinessException("无权删除此消息");
+        }
+        message.setStatus(MessageStatusEnum.WITHDRAWN.getCode());
+        this.updateById(message);
+    }
+
     /**
      * 将 Message 列表转换为 MessageVO 列表，并填充发送者信息
      */

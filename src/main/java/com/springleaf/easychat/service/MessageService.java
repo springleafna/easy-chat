@@ -27,4 +27,16 @@ public interface MessageService extends IService<Message> {
      * @return 分页消息列表（按时间倒序）
      */
     Page<MessageVO> getMessageHistory(MessageHistoryDTO queryDTO);
+
+    /**
+     * 删除消息
+     * @param messageId 消息ID
+     */
+    void deleteMessage(Long messageId);
+
+    /**
+     * 撤回消息
+     * @param messageId 消息ID
+     */
+    void recallMessage(Long messageId);
 }
