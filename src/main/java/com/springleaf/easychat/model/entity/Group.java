@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  * 群组实体类
  */
 @Data
-@TableName("groups")
+@TableName("`groups`")
 public class Group {
 
     /**
