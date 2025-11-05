@@ -19,11 +19,15 @@ import com.springleaf.easychat.service.GroupService;
 import com.springleaf.easychat.service.MessageService;
 import com.springleaf.easychat.service.UnreadService;
 import com.springleaf.easychat.service.UserService;
+import com.springleaf.easychat.utils.BeanCopyUtil;
+import com.springleaf.easychat.utils.ConversationIdUtil;
 import com.springleaf.easychat.utils.UserContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
+import org.springframework.util.StringUtils;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -239,6 +243,69 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
         this.update(conversation, updateWrapper);
 
         log.info("切换会话免打扰状态成功，用户ID: {}, 会话ID: {}, 免打扰: {}", userId, conversationId, conversation.getMuted());
+    }
+
+    @Override
+    public ConversationVO buildConversationVO(Long receiverId, String conversationId) {
+        if (receiverId == null) {
+            throw new BusinessException("接收者ID不能为空");
+        }
+        if (conversationId == null) {
+            throw new BusinessException("会话ID不能为空");
+        }
+
+        // 查询会话信息
+        LambdaQueryWrapper<Conversation> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Conversation::getUserId, receiverId)
+                .eq(Conversation::getConversationId, conversationId)
+                .eq(Conversation::getStatus, ConversationStatusEnum.NORMAL.getCode());
+        Conversation conversation = this.getOne(wrapper);
+        ConversationVO conversationVO = BeanCopyUtil.copy(conversation, ConversationVO.class);
+
+        // 设置未读数
+        conversationVO.setUnreadCount(unreadService.getUnreadCount(receiverId, conversationId));
+
+        // 根据会话类型设置会话名称和头像
+        if (ConversationTypeEnum.SINGLE.getCode().equals(conversation.getType())) {
+            // 单聊：显示好友信息
+            User friendUser = userService.getById(conversation.getTargetId());
+            if (friendUser != null) {
+                // 优先显示备注名，没有备注名则显示昵称
+                String displayName = friendUser.getNickname();
+                // 查询好友备注名
+                LambdaQueryWrapper<Friend> friendQueryWrapper = new LambdaQueryWrapper<>();
+                // 此时为获取接收者的好友，所以 userId 为 接收者ID
+                friendQueryWrapper.eq(Friend::getUserId, receiverId)
+                        .eq(Friend::getFriendId, ConversationIdUtil.extractTargetUserIdFromSingleChat(conversationId, receiverId));
+                Friend friend = friendService.getOne(friendQueryWrapper);
+                if (friend != null && friend.getRemarkName() != null) {
+                    displayName = friend.getRemarkName();
+                }
+                conversationVO.setConversationName(displayName);
+                conversationVO.setAvatarUrl(friendUser.getAvatarUrl());
+            }
+        } else if (ConversationTypeEnum.GROUP.getCode().equals(conversation.getType())) {
+            // 群聊：显示群组信息
+            Group group = groupService.getById(conversation.getTargetId());
+            if (group != null) {
+                conversationVO.setConversationName(group.getGroupName());
+                conversationVO.setAvatarUrl(group.getAvatarUrl());
+            }
+        }
+
+        // 设置最后一条消息内容
+        if (conversation.getLastMessageId() != null) {
+            Message lastMessage = messageService.getById(conversation.getLastMessageId());
+            if (lastMessage != null) {
+                conversationVO.setLastMessageContent(formatMessageContent(lastMessage));
+            } else {
+                conversationVO.setLastMessageContent("");
+            }
+        } else {
+            conversationVO.setLastMessageContent("");
+        }
+
+        return conversationVO;
     }
 
     /**

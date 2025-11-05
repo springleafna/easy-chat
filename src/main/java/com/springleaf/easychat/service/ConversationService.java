@@ -31,4 +31,12 @@ public interface ConversationService extends IService<Conversation> {
      * @param conversationId 会话ID
      */
     void toggleMute(String conversationId);
+
+    /**
+     * 构建会话VO
+     * @param receiverId 会话接收者ID
+     * @param conversationId 会话ID
+     * @return 会话VO
+     */
+    ConversationVO buildConversationVO(Long receiverId, String conversationId);
 }
