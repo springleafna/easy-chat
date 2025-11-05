@@ -1,6 +1,7 @@
 package com.springleaf.easychat.model.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 /**
@@ -8,6 +9,7 @@ import lombok.Data;
  * 客户端通知服务端当前活跃的会话ID
  */
 @Data
+@AllArgsConstructor
 public class ActiveChatDTO {
 
     /**

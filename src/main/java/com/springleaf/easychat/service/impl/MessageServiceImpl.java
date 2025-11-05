@@ -8,6 +8,7 @@ import com.springleaf.easychat.exception.BusinessException;
 import com.springleaf.easychat.mapper.ConversationMapper;
 import com.springleaf.easychat.mapper.GroupMemberMapper;
 import com.springleaf.easychat.mapper.MessageMapper;
+import com.springleaf.easychat.model.dto.ActiveChatDTO;
 import com.springleaf.easychat.model.dto.MessageHistoryDTO;
 import com.springleaf.easychat.model.dto.SendMessageDTO;
 import com.springleaf.easychat.model.entity.Conversation;
@@ -258,6 +259,9 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, Message> impl
         if (conversation == null) {
             throw new BusinessException("会话不存在或无权访问");
         }
+
+        // 设置活跃会话
+        unreadService.setActiveChat(new ActiveChatDTO(queryDTO.getConversationId()));
 
         // 5. 构建查询条件（游标分页）
         LambdaQueryWrapper<Message> queryWrapper = new LambdaQueryWrapper<>();

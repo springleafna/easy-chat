@@ -42,6 +42,13 @@ public class UnreadServiceImpl implements UnreadService {
     }
 
     @Override
+    public void deleteActiveChat(Long userId) {
+        String key = RedisKeyConstants.getActiveChatKey(userId);
+        stringRedisTemplate.delete(key);
+        log.debug("删除活跃会话，用户ID: {}", userId);
+    }
+
+    @Override
     public String getActiveChat(Long userId) {
         String key = RedisKeyConstants.getActiveChatKey(userId);
         return stringRedisTemplate.opsForValue().get(key);

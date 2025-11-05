@@ -56,6 +56,9 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
         // 1. 获取当前登录用户ID
         Long userId = UserContextUtil.getCurrentUserId();
 
+        // 删除 Redis 中存储的活跃会话记录
+        unreadService.deleteActiveChat(userId);
+
         // 2. 查询当前用户的所有正常状态的会话
         LambdaQueryWrapper<Conversation> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Conversation::getUserId, userId)

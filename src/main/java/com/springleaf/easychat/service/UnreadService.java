@@ -17,6 +17,14 @@ public interface UnreadService {
      */
     void setActiveChat(ActiveChatDTO dto);
 
+
+    /**
+     * 删除用户的活跃会话
+     *
+     * @param userId 用户ID
+     */
+    void deleteActiveChat(Long userId);
+
     /**
      * 获取用户的活跃会话ID
      *
@@ -66,4 +74,5 @@ public interface UnreadService {
      * @return Map<conversationId, unreadCount>，不存在的会话未读数为 0
      */
     Map<String, Integer> batchGetUnreadCounts(Long userId, List<String> conversationIds);
+
 }
