@@ -11,6 +11,7 @@ import com.springleaf.easychat.exception.BusinessException;
 import com.springleaf.easychat.mapper.ConversationMapper;
 import com.springleaf.easychat.mapper.GroupMapper;
 import com.springleaf.easychat.mapper.GroupMemberMapper;
+import com.springleaf.easychat.model.dto.AddGroupMemberDTO;
 import com.springleaf.easychat.model.dto.CreateGroupDTO;
 import com.springleaf.easychat.model.entity.Conversation;
 import com.springleaf.easychat.model.entity.Group;
@@ -82,7 +83,7 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, Group> implements
         groupMemberMapper.insert(ownerMember);
 
         // 添加其他成员（角色为普通成员）
-        addMembersInternal(group.getId(), memberIds, GroupMemberRoleEnum.MEMBER.getCode());
+        addMembersInternal(group.getId(), memberIds);
 
         // 为所有群成员创建会话记录（包括群主）
         createConversationsForAllMembers(group.getId(), ownerId, memberIds);
@@ -93,8 +94,13 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, Group> implements
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void addMembers(Long groupId, List<Long> userIds) {
-        // 获取当前用户
+    public void addMembers(AddGroupMemberDTO addGroupMemberDTO) {
+        log.info("添加群成员，群组ID: {}, 成员数量: {}",
+                addGroupMemberDTO.getGroupId(),
+                addGroupMemberDTO.getUserIds().size());
+
+        Long groupId = addGroupMemberDTO.getGroupId();
+        List<Long> userIds = addGroupMemberDTO.getUserIds();
         Long currentUserId = UserContextUtil.getCurrentUserId();
 
         // 验证群组是否存在且正常
@@ -143,7 +149,7 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, Group> implements
         }
 
         // 添加新成员
-        addMembersInternal(groupId, newMemberIds, GroupMemberRoleEnum.MEMBER.getCode());
+        addMembersInternal(groupId, newMemberIds);
 
         // 为新成员创建会话记录
         createConversationsForNewMembers(groupId, newMemberIds);
@@ -197,16 +203,17 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, Group> implements
     /**
      * 添加成员（内部方法）
      */
-    private void addMembersInternal(Long groupId, List<Long> userIds, Integer role) {
+    private void addMembersInternal(Long groupId, List<Long> userIds) {
         LocalDateTime now = LocalDateTime.now();
 
         for (Long userId : userIds) {
             GroupMember member = new GroupMember();
             member.setGroupId(groupId);
             member.setUserId(userId);
-            member.setRole(role);
+            member.setRole(GroupMemberRoleEnum.MEMBER.getCode());
             member.setStatus(GroupMemberStatusEnum.NORMAL.getCode());
             member.setJoinedAt(now);
+            member.setInviterId(UserContextUtil.getCurrentUserId());
             groupMemberMapper.insert(member);
         }
     }

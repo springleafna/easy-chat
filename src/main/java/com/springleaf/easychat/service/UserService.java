@@ -1,12 +1,16 @@
 package com.springleaf.easychat.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.springleaf.easychat.model.dto.user.SearchUserRequest;
 import com.springleaf.easychat.model.dto.user.UserLoginRequest;
 import com.springleaf.easychat.model.dto.user.UserRegisterRequest;
 import com.springleaf.easychat.model.dto.user.UserUpdateRequest;
 import com.springleaf.easychat.model.entity.User;
 import com.springleaf.easychat.model.vo.UserLoginVO;
+import com.springleaf.easychat.model.vo.UserSearchVO;
 import com.springleaf.easychat.model.vo.UserVO;
+
+import java.util.List;
 
 /**
  * 用户服务接口
@@ -55,4 +59,12 @@ public interface UserService extends IService<User> {
      * 退出登录
      */
     void logout();
+
+    /**
+     * 搜索用户（支持手机号、账号、邮箱搜索）
+     *
+     * @param request 搜索请求
+     * @return 搜索结果列表
+     */
+    List<UserSearchVO> searchUsers(SearchUserRequest request);
 }

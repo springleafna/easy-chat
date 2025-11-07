@@ -37,7 +37,7 @@ public class FriendServiceImpl extends ServiceImpl<FriendMapper, Friend> impleme
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Boolean addFriend(AddFriendRequest request) {
+    public void addFriend(AddFriendRequest request) {
         // 1. 获取当前登录用户ID
         Long userId = UserContextUtil.getCurrentUserId();
         Long friendId = request.getFriendId();
@@ -69,7 +69,7 @@ public class FriendServiceImpl extends ServiceImpl<FriendMapper, Friend> impleme
                 existFriend.setRemarkName(request.getRemarkName());
                 this.updateById(existFriend);
                 log.info("恢复好友关系成功，用户ID：{}, 好友ID：{}", userId, friendId);
-                return true;
+                return;
             } else if (FriendStatusEnum.BLACKLIST.getCode().equals(existFriend.getStatus())) {
                 throw new BusinessException(ResultCodeEnum.PARAM_ERROR, "对方在你的黑名单中");
             }
@@ -108,12 +108,11 @@ public class FriendServiceImpl extends ServiceImpl<FriendMapper, Friend> impleme
         }
 
         log.info("添加好友成功，用户ID：{}, 好友ID：{}", userId, friendId);
-        return true;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Boolean deleteFriend(DeleteFriendRequest request) {
+    public void deleteFriend(DeleteFriendRequest request) {
         // 1. 获取当前登录用户ID
         Long userId = UserContextUtil.getCurrentUserId();
         Long friendId = request.getFriendId();
@@ -146,7 +145,6 @@ public class FriendServiceImpl extends ServiceImpl<FriendMapper, Friend> impleme
         }
 
         log.info("删除好友成功，用户ID：{}, 好友ID：{}", userId, friendId);
-        return true;
     }
 
     @Override

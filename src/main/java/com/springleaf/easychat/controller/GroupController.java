@@ -46,10 +46,7 @@ public class GroupController {
      */
     @PostMapping("/addMembers")
     public Result<Void> addMembers(@Valid @RequestBody AddGroupMemberDTO addGroupMemberDTO) {
-        log.info("添加群成员，群组ID: {}, 成员数量: {}",
-                addGroupMemberDTO.getGroupId(),
-                addGroupMemberDTO.getUserIds().size());
-        groupService.addMembers(addGroupMemberDTO.getGroupId(), addGroupMemberDTO.getUserIds());
+        groupService.addMembers(addGroupMemberDTO);
         return Result.success();
     }
 }

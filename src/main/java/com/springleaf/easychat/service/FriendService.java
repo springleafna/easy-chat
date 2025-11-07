@@ -17,17 +17,15 @@ public interface FriendService extends IService<Friend> {
      * 添加好友
      *
      * @param request 添加好友请求
-     * @return 是否成功
      */
-    Boolean addFriend(AddFriendRequest request);
+    void addFriend(AddFriendRequest request);
 
     /**
      * 删除好友
      *
      * @param request 删除好友请求
-     * @return 是否成功
      */
-    Boolean deleteFriend(DeleteFriendRequest request);
+    void deleteFriend(DeleteFriendRequest request);
 
     /**
      * 获取好友列表

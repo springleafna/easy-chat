@@ -53,6 +53,7 @@ CREATE TABLE group_members (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     group_id BIGINT NOT NULL COMMENT '群组ID',
     user_id BIGINT NOT NULL COMMENT '成员ID',
+    inviter_id BIGINT DEFAULT NULL COMMENT '邀请人ID（谁拉你进群的，创建群时为NULL）',
     nickname VARCHAR(100) COMMENT '群内昵称',
     role TINYINT DEFAULT 1 COMMENT '成员角色：1-普通成员，2-管理员，3-群主',
     status TINYINT DEFAULT 1 COMMENT '成员状态：0-已退出，1-正常',
@@ -60,7 +61,8 @@ CREATE TABLE group_members (
 
     UNIQUE KEY uk_group_user (group_id, user_id),
     INDEX idx_group_id (group_id),
-    INDEX idx_user_id (user_id)
+    INDEX idx_user_id (user_id),
+    INDEX idx_inviter (inviter_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='群组成员表';
 
 CREATE TABLE conversations (
@@ -102,3 +104,23 @@ CREATE TABLE messages (
     -- 辅助索引：查某人发送的所有消息（用于个人中心等）
     INDEX idx_sender_created (sender_id, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='消息表';
+
+CREATE TABLE friend_requests (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '申请ID',
+    requester_id BIGINT NOT NULL COMMENT '申请人ID（发起好友申请的用户）',
+    target_id BIGINT NOT NULL COMMENT '目标用户ID（被申请添加为好友的用户）',
+    status TINYINT DEFAULT 0 COMMENT '状态：0-待处理，1-已同意，2-已拒绝，3-已撤回',
+    apply_message VARCHAR(200) DEFAULT '' COMMENT '申请备注（如：我是xxx）',
+    reject_reason VARCHAR(200) DEFAULT NULL COMMENT '拒绝原因（可选）',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '申请时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '处理时间',
+
+    -- 索引：查询"我收到的待处理好友申请"
+    INDEX idx_target_status_time (target_id, status, created_at DESC),
+
+    -- 索引：查询"我发出的好友申请记录"
+    INDEX idx_requester_status_time (requester_id, status, created_at DESC),
+
+    -- 复合索引：防止重复申请（配合业务逻辑检查）
+    INDEX idx_requester_target (requester_id, target_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='好友申请表';

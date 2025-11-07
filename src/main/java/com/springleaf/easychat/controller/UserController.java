@@ -1,16 +1,20 @@
 package com.springleaf.easychat.controller;
 
 import com.springleaf.easychat.common.Result;
+import com.springleaf.easychat.model.dto.user.SearchUserRequest;
 import com.springleaf.easychat.model.dto.user.UserLoginRequest;
 import com.springleaf.easychat.model.dto.user.UserRegisterRequest;
 import com.springleaf.easychat.model.dto.user.UserUpdateRequest;
 import com.springleaf.easychat.model.vo.UserLoginVO;
+import com.springleaf.easychat.model.vo.UserSearchVO;
 import com.springleaf.easychat.model.vo.UserVO;
 import com.springleaf.easychat.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 用户控制器
@@ -79,5 +83,17 @@ public class UserController {
     public Result<Void> logout() {
         userService.logout();
         return Result.success();
+    }
+
+    /**
+     * 搜索用户（支持手机号、账号、邮箱搜索）
+     *
+     * @param request 搜索请求
+     * @return 搜索结果列表
+     */
+    @PostMapping("/search")
+    public Result<List<UserSearchVO>> searchUsers(@Valid @RequestBody SearchUserRequest request) {
+        List<UserSearchVO> searchResults = userService.searchUsers(request);
+        return Result.success(searchResults);
     }
 }

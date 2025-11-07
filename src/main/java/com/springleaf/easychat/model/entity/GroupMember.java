@@ -30,6 +30,11 @@ public class GroupMember {
     private Long userId;
 
     /**
+     * 邀请人ID（谁拉你进群的，创建群时为NULL）
+     */
+    private Long inviterId;
+
+    /**
      * 群内昵称
      */
     private String nickname;
