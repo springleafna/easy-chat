@@ -4,16 +4,16 @@ spring:
   jackson:
     time-zone: GMT+8
   datasource:
-    url: jdbc:mysql://120.26.236.122:33306/easy_chat?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
-    username: root
-    password: YOUR_ROOT_PASSWORD
+    url: jdbc:mysql://${IP}:33306/easy_chat?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: 120.26.236.122
+      host: ${IP}
       port: 56379
-      username: default
-      password: Yjw123456#
+      username: ${REDIS_USERNAME}
+      password: ${REDIS_PASSWORD}
 logging:
   level:
     com.springleaf.easychat.mapper: DEBUG

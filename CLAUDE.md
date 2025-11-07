@@ -20,7 +20,9 @@ EasyChat 是一个基于 Spring Boot 3.4.2 的即时通讯系统后端，使用 
 - ✅ WebSocket 实时通讯（单聊、群聊）
 - ✅ 消息持久化与历史记录
 - ✅ 会话管理与未读消息提醒
+- ✅ 好友申请与审批流程
 - ✅ 好友与群组管理
+- ✅ 群组邀请机制（类似微信，无需审批）
 
 ## 常用开发命令
 
@@ -70,8 +72,8 @@ Mapper（数据访问层）
 ### 核心包结构
 
 - **`controller/`** - REST API 控制器
-  - `UserController`：用户管理（登录、注册）
-  - `FriendController`：好友管理
+  - `UserController`：用户管理（登录、注册、搜索用户）
+  - `FriendController`：好友管理（好友申请、同意/拒绝、撤回、好友列表）
   - `GroupController`：群组管理
   - `MessageController`：消息历史查询（分页）
   - `ConversationController`：会话列表、标记活跃会话、置顶、免打扰
@@ -79,6 +81,9 @@ Mapper（数据访问层）
 - **`service/`** 和 `service/impl/` - 业务逻辑层
   - Service 接口定义业务方法
   - impl 包含具体实现
+  - **UserService**：用户注册、登录、信息更新、用户搜索
+  - **FriendService**：好友关系管理（删除好友、好友列表）
+  - **FriendRequestService**：好友申请管理（发送、处理、撤回、查询）
   - **MessageService**：消息发送、历史查询、删除、撤回
   - **ConversationService**：会话列表查询、置顶、免打扰
   - **UnreadService**：基于 Redis 的未读消息管理、活跃会话管理
@@ -89,14 +94,19 @@ Mapper（数据访问层）
 
 - **`model/`** - 数据模型
   - `entity/`：数据库实体类
-    - User, Message, Friend, Group, GroupMember, Conversation
+    - User, Message, Friend, FriendRequest, Group, GroupMember, Conversation
   - `dto/`：数据传输对象（请求参数）
     - `SendMessageDTO`：发送消息请求
     - `MessageHistoryDTO`：历史消息查询请求
     - `ActiveChatDTO`：设置活跃会话请求
+    - `SendFriendRequestDTO`：发送好友申请请求
+    - `HandleFriendRequestDTO`：处理好友申请请求
+    - `SearchUserRequest`：搜索用户请求
   - `vo/`：视图对象（响应数据）
     - `MessageVO`：消息详情（含发送者信息、会话ID）
     - `ConversationVO`：会话详情（含最后消息预览、未读数、置顶、免打扰）
+    - `FriendRequestVO`：好友申请详情（含申请人信息、状态）
+    - `UserSearchVO`：用户搜索结果（含好友关系状态）
 
 - **`config/`** - 配置类
   - `SaTokenConfig`：认证拦截器配置
@@ -117,7 +127,9 @@ Mapper（数据访问层）
   - `ConversationTypeEnum`：会话类型（单聊、群聊）
   - `MessageTypeEnum`：消息类型（文本、图片、语音、视频等）
   - `MessageStatusEnum`：消息状态（正常、已撤回、已删除）
-  - `UserStatusEnum`、`FriendStatusEnum` 等业务枚举
+  - `FriendStatusEnum`：好友关系状态（正常、已删除、黑名单）
+  - `FriendRequestStatusEnum`：好友申请状态（待处理、已同意、已拒绝、已撤回）
+  - `UserStatusEnum`、`GroupMemberRoleEnum` 等业务枚举
 
 - **`exception/`** - 异常定义
   - `BusinessException`：业务异常
@@ -125,6 +137,8 @@ Mapper（数据访问层）
 - **`utils/`** - 工具类
   - `UserContextUtil`：获取当前登录用户信息
   - `ConversationIdUtil`：会话ID生成与解析（单聊、群聊）
+
+- **`constants/`** - 静态常量管理
   - `RedisKeyConstants`：Redis键管理（未读数、活跃会话）
 
 ### 关键设计模式
@@ -133,7 +147,7 @@ Mapper（数据访问层）
 - 所有 API（除登录/注册）需要登录认证
 - Token 名称为 `Authorization`（Header 传递）
 - 不支持同账号并发登录（新登录会挤掉旧登录）
-- Token 永不过期（`timeout: -1`）
+- Token 一天（`timeout: 86400`）
 - 详见 `SaTokenConfig.java`
 
 **2. 统一响应格式**
@@ -223,45 +237,43 @@ Mapper（数据访问层）
 - **自动填充**：时间戳字段自动填充，减少代码重复
 - **活跃会话缓存**：60秒过期，减少 Redis 存储压力
 
+**10. 好友申请机制（类似微信）**
+- **申请流程**：发送申请 → 等待审批 → 同意/拒绝 → 成为好友
+- **状态管理**：待处理、已同意、已拒绝、已撤回
+- **防重复申请**：同一用户对同一目标的待处理申请只能有一条（业务逻辑控制）
+- **已是好友检查**：发送申请前检查是否已经是好友关系
+- **撤回机制**：申请人可以撤回待处理的申请
+- **数据一致性**：同意申请时，自动在 `friends` 表创建双向好友关系
+- **Service层**：`FriendRequestService` 提供完整的申请管理功能
+  - `sendFriendRequest()`：发送好友申请
+  - `handleFriendRequest()`：处理申请（同意创建双向好友关系，拒绝记录原因）
+  - `withdrawFriendRequest()`：撤回申请
+  - `getReceivedRequests()`：获取收到的申请列表
+  - `getSentRequests()`：获取发出的申请列表
+  - `getUnhandledCount()`：获取未处理申请数量
+
+**11. 群组邀请机制（类似微信，无需审批）**
+- **设计理念**：采用微信模式，群成员可以直接邀请好友进群，无需审批流程
+- **inviter_id字段**：`group_members` 表包含 `inviter_id` 字段，记录邀请人ID
+- **入群方式**：
+  - 创建群组：群主创建群时直接拉好友进群（`inviter_id` 为群主ID）
+  - 邀请进群：群成员直接邀请好友，无需申请表（直接插入 `group_members` 记录）
+  - 扫码进群：通过二维码或邀请链接直接进群（`inviter_id` 可为 NULL）
+- **无需申请表**：群组加入不使用 `friend_requests` 表，直接操作 `group_members` 表
+- **权限控制**（可选）：可在 `groups` 表添加 `join_mode` 字段控制入群方式（预留扩展）
+
 ## 数据库说明
 
 ### 核心实体表
 - **users**：用户表（账号、密码、昵称、头像等）
-- **friends**：好友关系表
+- **friends**：好友关系表（双向关系）
+- **friend_requests**：好友申请表（申请人、目标用户、状态、备注等）
 - **groups**：群组表
-- **group_members**：群成员表
+- **group_members**：群成员表（新增 inviter_id 字段记录邀请人）
 - **messages**：消息表（存储所有聊天消息）
 - **conversations**：会话表（单聊/群聊会话管理）
 
 具体sql参考/docs/easy_chat.sql
-
-### 表结构设计说明
-
-**会话表（conversations）设计要点**：
-- ✅ **无自增ID**：使用 `conversation_id`（业务主键）作为主标识
-- ✅ **联合主键**：`PRIMARY KEY (user_id, conversation_id)` - 每个用户对每个会话有一条记录
-- ✅ **会话ID格式**：
-  - 单聊：`s_{min}_{max}`（min 和 max 是对话双方的用户ID，小的在前）
-  - 群聊：`g_{groupId}`
-- ✅ **字段说明**：
-  - `conversation_id`：会话ID（VARCHAR，业务主键）
-  - `user_id`：用户ID（该会话所属用户）
-  - `target_id`：目标ID（单聊时为对方用户ID，群聊时为群组ID）
-  - `type`：会话类型（1-单聊，2-群聊）
-  - `last_message_id`：最后一条消息ID
-  - `last_message_time`：最后消息时间
-  - `pinned`：是否置顶（BOOLEAN）
-  - `muted`：是否免打扰（BOOLEAN）
-  - `status`：会话状态（1-正常，2-已删除）
-
-**消息表（messages）设计要点**：
-- ✅ **自增ID**：`id BIGINT AUTO_INCREMENT PRIMARY KEY`
-- ✅ **会话关联**：通过 `conversation_id` 关联会话（VARCHAR）
-- ✅ **移除字段**：不再有 `receiver_id` 和 `group_id`（统一使用 conversation_id）
-- ✅ **查询模式**：
-  - 单聊消息：通过 `conversation_id = 's_{min}_{max}'` 查询双方对话
-  - 群聊消息：通过 `conversation_id = 'g_{groupId}'` 查询群聊消息
-- ✅ **消息状态**：status 字段（1-正常，2-已撤回，3-已删除）
 
 **MyBatis-Plus 使用约束**：
 - ⚠️ **conversations 表无 @TableId 注解字段**，因此不能使用 `updateById()`、`deleteById()` 等方法
@@ -295,18 +307,68 @@ Mapper（数据访问层）
   ```
 
 ### REST API 接口
+
+#### 用户相关
+- **POST /user/register** - 用户注册
+- **POST /user/login** - 用户登录
+- **GET /user/info** - 获取当前用户信息
+- **PUT /user/update** - 更新用户信息
+- **POST /user/logout** - 退出登录
+- **POST /user/search** - 搜索用户（支持手机号、账号、邮箱搜索）
+
+#### 好友申请相关
+- **POST /friend/request/send** - 发送好友申请
+- **POST /friend/request/handle** - 处理好友申请（同意/拒绝）
+- **DELETE /friend/request/withdraw/{requestId}** - 撤回好友申请
+- **GET /friend/request/received** - 获取收到的好友申请列表
+- **GET /friend/request/sent** - 获取发出的好友申请列表
+- **GET /friend/request/unhandled/count** - 获取未处理的好友申请数量
+
+#### 好友管理相关
+- **GET /friend/list** - 获取好友列表
+- **DELETE /friend/delete** - 删除好友
+- **POST /friend/add** - ⚠️ 已废弃，请使用好友申请流程
+
+#### 会话相关
 - **GET /conversation/list** - 获取会话列表（含未读数、最后消息预览、置顶、免打扰状态）
 - **POST /conversation/active** - 设置活跃会话（用户进入聊天页时调用）
   - 请求体：`{"conversationId": "s_1_3"}`
   - 作用：设置当前活跃会话ID，60秒内收到该会话消息不增加未读数
 - **PUT /conversation/pin/{conversationId}** - 切换会话置顶状态
 - **PUT /conversation/mute/{conversationId}** - 切换会话免打扰状态
+
+#### 消息相关
 - **GET /message/history** - 分页查询历史消息（自动清除未读数）
   - 参数：`conversationId`, `lastMessageId`, `size`（游标分页，推荐）
 - **DELETE /message/{messageId}** - 删除消息（仅发送者可删除）
 - **PUT /message/recall/{messageId}** - 撤回消息（仅发送者可撤回）
 
 ### 用户交互流程
+
+#### 添加好友流程（申请审批模式）
+```
+1. 用户A 搜索用户 (POST /user/search，支持手机号/账号/邮箱)
+   → 返回用户列表，含好友关系状态（是否已是好友）
+2. 用户A 发送好友申请 (POST /friend/request/send)
+   → 系统检查：不能向自己发申请、目标用户存在、未是好友、无待处理申请
+   → 插入 friend_requests 表（status=0 待处理）
+3. 用户B 查看收到的申请 (GET /friend/request/received)
+   → 显示申请人信息、申请备注、申请时间等
+4. 用户B 处理申请：
+   a. 同意 (POST /friend/request/handle, accept=true)
+      → 更新 friend_requests.status=1（已同意）
+      → 在 friends 表创建双向好友关系
+      → 可选填写好友备注名
+   b. 拒绝 (POST /friend/request/handle, accept=false)
+      → 更新 friend_requests.status=2（已拒绝）
+      → 可选填写拒绝原因
+5. 用户A 查看发出的申请状态 (GET /friend/request/sent)
+   → 显示待处理/已同意/已拒绝状态
+6. 用户A 可撤回待处理的申请 (DELETE /friend/request/withdraw/{id})
+   → 更新 friend_requests.status=3（已撤回）
+```
+
+#### 聊天消息流程
 ```
 1. 用户登录 → 获取 Token
 2. 建立 WebSocket 连接 (携带 Token)
@@ -325,7 +387,29 @@ Mapper（数据访问层）
 7. 离开会话页：活跃会话60秒后自动过期
 ```
 
-## 开发注意事项
+#### 群组邀请流程（无需审批）
+```
+1. 创建群组：
+   - 用户A 点击"创建群组"，选择好友列表中的多个好友（B, C, D）
+   - 系统执行：
+     a. 在 groups 表插入群组记录（owner_id=A）
+     b. 在 group_members 表插入记录：
+        - A（群主，role=3, inviter_id=NULL）
+        - B（普通成员，role=1, inviter_id=A）
+        - C（普通成员，role=1, inviter_id=A）
+        - D（普通成员，role=1, inviter_id=A）
+     c. 为所有成员创建群聊会话（conversations 表）
+     d. 发送系统消息："用户A 创建了群聊"
+
+2. 邀请进群（类似微信，无需审批）：
+   - 用户A（群成员）点击"邀请好友进群"，选择好友B
+   - 系统检查：用户B 是否已在群中、群是否已满员
+   - 检查通过后：
+     a. 直接在 group_members 表插入记录（user_id=B, inviter_id=A, status=1）
+     b. 为用户B 创建群聊会话
+     c. 发送系统消息："用户A 邀请 用户B 加入群聊"
+   - ⚠️ 无需申请审批流程，直接加入
+```
 
 ### WebSocket 开发规范
 1. **消息格式**：客户端发送的消息必须是 JSON 格式，包含必要字段（messageType, conversationType 等）
@@ -395,55 +479,6 @@ Mapper（数据访问层）
 ### 日志级别
 - Mapper 层和 MyBatis 日志级别为 DEBUG（仅开发环境）
 - 可在 application-dev.yml 中调整日志级别
-
-## 常见问题与解决方案
-
-### 1. WebSocket 连接失败
-- **问题**：WebSocket 握手失败，返回 403 或连接被拒绝
-- **原因**：Token 无效或未提供
-- **解决**：确保连接 URL 包含有效的 token 参数：`ws://localhost:8091/ws/chat?token=YOUR_TOKEN`
-
-### 2. 未读数不准确
-- **问题**：查看消息后未读数仍然显示，或者在聊天页收到消息却增加了未读数
-- **原因**：前端未正确调用活跃会话接口
-- **解决**：
-  - 进入聊天页时必须调用 `POST /conversation/active` 设置活跃会话
-  - 离开聊天页时无需手动清除，60秒后自动过期
-  - 确保加载历史消息时调用了 `GET /message/history`（会自动清除未读数）
-
-### 3. 会话表更新失败
-- **问题**：调用 `conversationService.updateById(conversation)` 报错或不生效
-- **原因**：Conversation 实体类没有 `@TableId` 注解字段，MyBatis-Plus 无法识别主键
-- **解决**：使用 `update(entity, wrapper)` 方式更新
-  ```java
-  LambdaQueryWrapper<Conversation> wrapper = new LambdaQueryWrapper<>();
-  wrapper.eq(Conversation::getUserId, userId)
-         .eq(Conversation::getConversationId, conversationId);
-  conversationMapper.update(conversation, wrapper);
-  ```
-
-### 4. 会话ID格式错误
-- **问题**：单聊会话ID不一致，导致查询不到对话
-- **原因**：手动拼接会话ID时，用户ID顺序不一致
-- **解决**：必须使用 `ConversationIdUtil` 工具类生成会话ID
-  - 单聊：`ConversationIdUtil.generateSingleChatId(userId1, userId2)` - 自动处理ID排序
-  - 群聊：`ConversationIdUtil.generateGroupChatId(groupId)`
-
-### 5. 群聊消息只有发送者收到
-- **问题**：发送群聊消息后，只有自己能看到
-- **原因**：未查询群成员列表或推送逻辑有误
-- **解决**：检查 `ChatWebSocketHandler.pushMessage()` 中的群聊推送逻辑，确保：
-  - 查询了群成员列表
-  - 遍历所有在线成员推送（发送者自己除外）
-  - 正确处理活跃会话和未读数逻辑
-
-### 6. Redis 未读数不一致
-- **问题**：Redis 中的未读数与实际不符
-- **原因**：Redis 数据过期或被误删除
-- **解决**：
-  - Redis 未读数是临时数据，过期后会自动清零
-  - 前端应以 Redis 数据为准，不要在本地维护未读数
-  - 如需持久化未读数，可考虑定期同步到数据库
 
 ### 参考文档
 - **数据库脚本**：见 `docs/easy_chat.sql` 
