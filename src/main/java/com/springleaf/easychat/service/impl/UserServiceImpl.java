@@ -155,6 +155,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setNickname(request.getNickname());
         user.setEmail(request.getEmail());
         user.setAvatarUrl(request.getAvatarUrl());
+        user.setRegion(request.getRegion());
         user.setGender(request.getGender());
         user.setBirthday(request.getBirthday());
         user.setSignature(request.getSignature());
@@ -243,6 +244,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             searchVO.setPhone(maskPhone(user.getPhone()));
             searchVO.setEmail(maskEmail(user.getEmail()));
             searchVO.setAvatarUrl(user.getAvatarUrl());
+            searchVO.setRegion(user.getRegion());
             searchVO.setGender(user.getGender());
             searchVO.setBirthday(user.getBirthday());
             searchVO.setSignature(user.getSignature());

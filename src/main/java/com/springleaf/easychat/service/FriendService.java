@@ -33,4 +33,12 @@ public interface FriendService extends IService<Friend> {
      * @return 好友列表
      */
     List<FriendVO> getFriendList();
+
+    /**
+     * 获取好友信息
+     *
+     * @param id 好友ID
+     * @return 好友信息
+     */
+    FriendVO getFriendInfo(Long id);
 }

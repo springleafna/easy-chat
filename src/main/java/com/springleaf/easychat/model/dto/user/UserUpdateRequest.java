@@ -32,6 +32,11 @@ public class UserUpdateRequest {
     private String avatarUrl;
 
     /**
+     * 地区（选填）
+     */
+    private String region;
+
+    /**
      * 性别：0-未知，1-男，2-女（选填）
      */
     private Integer gender;

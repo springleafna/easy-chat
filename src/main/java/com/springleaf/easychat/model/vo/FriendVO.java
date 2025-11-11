@@ -54,6 +54,11 @@ public class FriendVO {
     private String avatarUrl;
 
     /**
+     * 好友地区
+     */
+    private String region;
+
+    /**
      * 好友性别：0-未知，1-男，2-女
      */
     private Integer gender;

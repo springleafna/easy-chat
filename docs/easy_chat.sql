@@ -8,6 +8,7 @@ CREATE TABLE users (
     phone VARCHAR(20) UNIQUE COMMENT '手机号',
     email VARCHAR(100) UNIQUE COMMENT '邮箱',
     avatar_url VARCHAR(500) COMMENT '头像URL',
+    region VARCHAR(500) COMMENT '地区',
     gender TINYINT DEFAULT 0 COMMENT '性别：0-未知，1-男，2-女',
     birthday DATE COMMENT '生日',
     signature VARCHAR(200) DEFAULT '' COMMENT '个性签名',

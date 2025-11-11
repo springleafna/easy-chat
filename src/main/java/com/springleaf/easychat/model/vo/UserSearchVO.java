@@ -42,6 +42,11 @@ public class UserSearchVO {
     private String avatarUrl;
 
     /**
+     * 地区
+     */
+    private String region;
+
+    /**
      * 性别：0-未知，1-男，2-女
      */
     private Integer gender;

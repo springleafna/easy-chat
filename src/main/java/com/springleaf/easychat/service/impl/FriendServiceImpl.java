@@ -187,6 +187,7 @@ public class FriendServiceImpl extends ServiceImpl<FriendMapper, Friend> impleme
                 friendVO.setPhone(friendUser.getPhone());
                 friendVO.setEmail(friendUser.getEmail());
                 friendVO.setAvatarUrl(friendUser.getAvatarUrl());
+                friendVO.setRegion(friendUser.getRegion());
                 friendVO.setGender(friendUser.getGender());
                 friendVO.setBirthday(friendUser.getBirthday());
                 friendVO.setSignature(friendUser.getSignature());
@@ -198,5 +199,42 @@ public class FriendServiceImpl extends ServiceImpl<FriendMapper, Friend> impleme
 
         log.info("查询好友列表成功，用户ID：{}, 好友数量：{}", userId, friendVOList.size());
         return friendVOList;
+    }
+
+    @Override
+    public FriendVO getFriendInfo(Long id) {
+        // 1. 获取当前登录用户ID
+        Long userId = UserContextUtil.getCurrentUserId();
+        // 2. 查询好友关系是否存在
+        LambdaQueryWrapper<Friend> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(Friend::getUserId, userId)
+                .eq(Friend::getFriendId, id);
+        Friend friend = this.getOne(queryWrapper);
+        if (friend == null) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR, "好友关系不存在");
+        }
+        // 3. 查询好友用户信息
+        User friendUser = userService.getById(id);
+        if (friendUser == null) {
+            throw new BusinessException(ResultCodeEnum.PARAM_ERROR, "好友用户不存在");
+        }
+        // 4. 组装FriendVO
+        FriendVO friendVO = new FriendVO();
+        friendVO.setId(friend.getId());
+        friendVO.setFriendId(friendUser.getId());
+        friendVO.setAccount(friendUser.getAccount());
+        friendVO.setNickname(friendUser.getNickname());
+        friendVO.setRemarkName(friend.getRemarkName());
+        friendVO.setPhone(friendUser.getPhone());
+        friendVO.setEmail(friendUser.getEmail());
+        friendVO.setAvatarUrl(friendUser.getAvatarUrl());
+        friendVO.setRegion(friendUser.getRegion());
+        friendVO.setGender(friendUser.getGender());
+        friendVO.setBirthday(friendUser.getBirthday());
+        friendVO.setSignature(friendUser.getSignature());
+        friendVO.setStatus(friend.getStatus());
+        friendVO.setCreatedAt(friend.getCreatedAt());
+        log.info("查询好友信息成功，用户ID：{}, 好友ID：{}", userId, id);
+        return friendVO;
     }
 }

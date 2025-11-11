@@ -9,6 +9,7 @@ import com.springleaf.easychat.model.vo.FriendRequestVO;
 import com.springleaf.easychat.model.vo.FriendVO;
 import com.springleaf.easychat.service.FriendRequestService;
 import com.springleaf.easychat.service.FriendService;
+import jakarta.validation.constraints.NotNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -61,6 +62,18 @@ public class FriendController {
     public Result<List<FriendVO>> getFriendList() {
         List<FriendVO> friendList = friendService.getFriendList();
         return Result.success(friendList);
+    }
+
+    /**
+     * 获取好友信息
+     *
+     * @param id 好友ID
+     * @return 好友信息
+     */
+    @GetMapping("/info")
+    public Result<FriendVO> getFriendInfo(@RequestParam @NotNull(message = "好友用户ID不能为空") Long id) {
+        FriendVO friendVO = friendService.getFriendInfo(id);
+        return Result.success(friendVO);
     }
 
     /**
